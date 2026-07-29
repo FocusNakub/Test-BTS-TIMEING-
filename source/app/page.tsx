@@ -19,6 +19,7 @@ type RouteEdge = { to: string; transfer: boolean };
 type RoutePreference = "fastest" | "cheapest" | "fewest-transfers";
 type ViewMode = "trains" | "planner" | "map";
 type MapMode = "nearby" | "network";
+type MapInfoTab = "exits" | "connections" | "places";
 type MapLocation = { lat: number; lon: number; label: string };
 type RoutePlan = {
   nodes: RouteNode[];
@@ -585,6 +586,7 @@ function crowdLabel(value: number) {
 export default function Home() {
   const [activeView, setActiveView] = useState<ViewMode>("trains");
   const [mapMode, setMapMode] = useState<MapMode>("nearby");
+  const [mapInfoTab, setMapInfoTab] = useState<MapInfoTab>("exits");
   const [mapZoom, setMapZoom] = useState(1);
   const [mapLineId, setMapLineId] = useState("bts-sukhumvit");
   const [mapStation, setMapStation] = useState("อโศก");
@@ -930,11 +932,17 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="nearby-category-grid" aria-label="ค้นหาสถานที่ใกล้สถานี">
-                {nearbyCategories.map(([icon, category]) => <a key={category} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${category} ใกล้สถานี${mapStation} ${mapLine.name}`)}`} target="_blank" rel="noreferrer"><b>{icon}</b><span>{category}</span><small>ค้นหารอบสถานี ↗</small></a>)}
+              <div className="station-info-tabs" role="tablist" aria-label="ข้อมูลรอบสถานี">
+                <button className={mapInfoTab === "exits" ? "active" : ""} onClick={() => setMapInfoTab("exits")} role="tab" aria-selected={mapInfoTab === "exits"}><b>↗</b><span>ทางออก<small>เดินและสิ่งอำนวยความสะดวก</small></span></button>
+                <button className={mapInfoTab === "connections" ? "active" : ""} onClick={() => setMapInfoTab("connections")} role="tab" aria-selected={mapInfoTab === "connections"}><b>⇄</b><span>จุดต่อรถ<small>รถ · ราง · เรือ</small></span></button>
+                <button className={mapInfoTab === "places" ? "active" : ""} onClick={() => setMapInfoTab("places")} role="tab" aria-selected={mapInfoTab === "places"}><b>⌖</b><span>สถานที่<small>กิน · เที่ยว · พัก</small></span></button>
               </div>
 
-              <section className="connections-card" aria-label="การเดินทางเชื่อมต่อจากสถานีนี้">
+              {mapInfoTab === "places" && <div className="nearby-category-grid compact-panel" aria-label="ค้นหาสถานที่ใกล้สถานี">
+                {nearbyCategories.map(([icon, category]) => <a key={category} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${category} ใกล้สถานี${mapStation} ${mapLine.name}`)}`} target="_blank" rel="noreferrer"><b>{icon}</b><span>{category}</span><small>ค้นหารอบสถานี ↗</small></a>)}
+              </div>}
+
+              {mapInfoTab === "connections" && <section className="connections-card compact-panel" aria-label="การเดินทางเชื่อมต่อจากสถานีนี้">
                 <div className="connections-heading"><div><p className="eyebrow dark">CONNECT HERE</p><h3>ต่อรถ · ราง · เรือ</h3></div><span>จากสถานี{mapStation}</span></div>
                 <div className="connection-groups">
                   <article><i>🚆</i><div><small>รถไฟฟ้าและรถไฟ</small>{railConnections.length ? railConnections.map(({ line: connectionLine, station: connectionStation }) => <button key={`${connectionLine.id}-${connectionStation}`} onClick={() => showMapStation(connectionLine.id, connectionStation)}><b style={{ background: connectionLine.color }}>{connectionLine.short}</b><span>{connectionLine.name}<em>สถานี{connectionStation}</em></span></button>) : <span className="no-connection">ไม่พบสถานีเปลี่ยนสายที่เชื่อมตรง</span>}</div></article>
@@ -943,16 +951,16 @@ export default function Home() {
                   {selectedSurfaceConnections.other?.length ? <article><i>🚐</i><div><small>บริการเชื่อมต่ออื่น</small><ul>{selectedSurfaceConnections.other.map((item) => <li key={item}>{item}</li>)}</ul></div></article> : null}
                 </div>
                 <p>หมายเลขรถโดยสารและรอบเรืออาจเปลี่ยนตามการปรับเส้นทางหรือช่วงเวลา โปรดตรวจป้าย ณ จุดขึ้นและแอปของผู้ให้บริการอีกครั้ง</p>
-              </section>
+              </section>}
 
-              <section className="station-guide-card" aria-label="คู่มือใช้งานสถานี">
+              {mapInfoTab === "exits" && <section className="station-guide-card compact-panel" aria-label="คู่มือใช้งานสถานี">
                 <header><div><p className="eyebrow dark">STATION GUIDE</p><h3>ลงทางไหน เดินกี่นาที</h3></div><button className={accessPointSaved ? "saved" : ""} onClick={toggleSavedAccessPoint}>{accessPointSaved ? "★ บันทึกแล้ว" : "☆ บันทึกสถานีนี้"}</button></header>
                 {selectedStationGuide ? <>
                   <div className="exit-guide-list">{selectedStationGuide.exits.map((exit) => <article key={`${exit.name}-${exit.destination}`}><b>{exit.name}</b><div><strong>{exit.destination}</strong><span>เดิน {exit.walk}</span></div><a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(exit.destination)}&travelmode=walking`} target="_blank" rel="noreferrer">นำทาง ↗</a></article>)}</div>
                   <div className="facility-list"><small>สิ่งอำนวยความสะดวกที่พบ</small><p>{selectedStationGuide.facilities.map((facility) => <span key={facility}>{facility}</span>)}</p></div>
                   <div className="guide-freshness"><span className={selectedStationGuide.confidence === "ยืนยันสูง" ? "high" : "check"}>{selectedStationGuide.confidence}</span><p>ตรวจข้อมูลล่าสุด {selectedStationGuide.checked}<small>ควรตรวจป้ายทางออกในสถานีอีกครั้ง โดยเฉพาะเมื่อมีการก่อสร้าง</small></p></div>
                 </> : <div className="guide-empty"><strong>ยังไม่มีหมายเลขทางออกที่ยืนยันสำหรับสถานีนี้</strong><span>ระบบจะไม่เดาหมายเลขทางออก กดเปิดแผนที่เพื่อดูจุดหมายและระยะเดินแทน</span><a href={mapSearchUrl} target="_blank" rel="noreferrer">ตรวจรอบสถานีบนแผนที่ ↗</a></div>}
-              </section>
+              </section>}
 
               <div className="map-actions">
                 <a className="map-primary-link" href={mapSearchUrl} target="_blank" rel="noreferrer">เปิดแผนที่เต็มและนำทาง ↗</a>
