@@ -43,10 +43,9 @@ function linesFor(text, fallback) {
 
 function cleanPostText(value) {
   return value
-    .replace(/All reactions:[\\s\\S]*$/i, "")
-    .replace(/(?:Like|Comment|Share|See more from)[\\s\\S]*$/i, "")
-    .replace(/(?:Email or phone number|Password|Log In|Forgot)[\\s\\S]*$/i, "")
-    .replace(/\\s+/g, " ")
+    .replace(/(?:See more|View more comments|All reactions:|Like Comment|Email or phone number|Password|Log In|Forgot)[\s\S]*$/i, "")
+    .replace(/^\s*(?:ลิงก์\s*)?การให้บริการ\s*/i, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
