@@ -139,6 +139,7 @@ const nearbyCategories = [
 ] as const;
 
 type SurfaceConnections = { buses?: string[]; boats?: string[]; other?: string[] };
+type StationGuide = { exits: { name: string; destination: string; walk: string }[]; facilities: string[]; confidence: "ยืนยันสูง" | "ควรตรวจป้าย"; checked: string };
 const surfaceConnections: Record<string, SurfaceConnections> = {
   "bts-sukhumvit|อโศก": { buses: ["2", "25", "38", "40", "48", "98", "136", "185", "501", "508", "511"] },
   "bts-sukhumvit|อ่อนนุช": { buses: ["2", "23", "25", "38", "45", "46", "48", "116", "132", "507", "508", "511", "3-1", "3-6", "3-8"] },
@@ -153,6 +154,17 @@ const surfaceConnections: Record<string, SurfaceConnections> = {
   "mrt-blue|สนามไชย": { boats: ["เรือด่วนเจ้าพระยา · ท่าราชินี", "เรือข้ามฟากฝั่งธนบุรีตามรอบ"] },
   "mrt-blue|หัวลำโพง": { buses: ["4", "21", "25", "40", "53", "73", "85", "109", "113", "507", "529"] },
   "arl|สุวรรณภูมิ": { buses: ["S1", "Airport Shuttle Bus"], other: ["รถโดยสารสนามบิน · อาคารผู้โดยสาร"] },
+};
+
+const stationGuides: Record<string, StationGuide> = {
+  "bts-sukhumvit|อโศก": { exits: [{ name: "ทางออก 1", destination: "Terminal 21 และจุดต่อ MRT สุขุมวิท", walk: "ประมาณ 2–5 นาที" }, { name: "ทางออก 3", destination: "Exchange Tower และถนนรัชดาภิเษก", walk: "ประมาณ 3–6 นาที" }], facilities: ["ลิฟต์", "ห้องน้ำในศูนย์การค้า", "แท็กซี่", "วินมอเตอร์ไซค์"], confidence: "ควรตรวจป้าย", checked: "30 ก.ค. 2569" },
+  "bts-sukhumvit|สยาม": { exits: [{ name: "ทางเชื่อมศูนย์การค้า", destination: "Siam Paragon · Siam Center · Siam Square", walk: "ประมาณ 2–6 นาที" }], facilities: ["ลิฟต์", "ห้องน้ำในศูนย์การค้า", "แท็กซี่"], confidence: "ควรตรวจป้าย", checked: "30 ก.ค. 2569" },
+  "bts-sukhumvit|หมอชิต": { exits: [{ name: "ทางไปสวนจตุจักร", destination: "MRT สวนจตุจักรและสวนจตุจักร", walk: "ประมาณ 3–7 นาที" }, { name: "ทางไปตลาดนัด", destination: "ตลาดนัดจตุจักร", walk: "ประมาณ 7–12 นาที" }], facilities: ["ลิฟต์", "แท็กซี่", "วินมอเตอร์ไซค์", "ป้ายรถโดยสารหลายจุด"], confidence: "ควรตรวจป้าย", checked: "30 ก.ค. 2569" },
+  "bts-silom|สะพานตากสิน": { exits: [{ name: "ทางออก 2", destination: "ท่าเรือสาทรและเรือด่วนเจ้าพระยา", walk: "ประมาณ 2–4 นาที" }], facilities: ["ลิฟต์", "แท็กซี่", "ท่าเรือ", "วินมอเตอร์ไซค์"], confidence: "ยืนยันสูง", checked: "30 ก.ค. 2569" },
+  "bts-silom|ศาลาแดง": { exits: [{ name: "ทางเชื่อม MRT", destination: "MRT สีลมและสวนลุมพินี", walk: "ประมาณ 4–8 นาที" }, { name: "ทางเชื่อมศูนย์การค้า", destination: "Silom Complex", walk: "ประมาณ 2–4 นาที" }], facilities: ["ลิฟต์", "ห้องน้ำในศูนย์การค้า", "แท็กซี่", "วินมอเตอร์ไซค์"], confidence: "ควรตรวจป้าย", checked: "30 ก.ค. 2569" },
+  "bts-silom|บางหว้า": { exits: [{ name: "ทางเชื่อม MRT", destination: "MRT สีน้ำเงิน สถานีบางหว้า", walk: "ประมาณ 3–6 นาที" }, { name: "ทางไปท่าเรือ", destination: "ท่าเรือคลองภาษีเจริญ", walk: "ประมาณ 4–8 นาที" }], facilities: ["ลิฟต์", "ที่จอดรถ", "แท็กซี่", "ท่าเรือ"], confidence: "ควรตรวจป้าย", checked: "30 ก.ค. 2569" },
+  "mrt-blue|สนามไชย": { exits: [{ name: "ทางออก 1", destination: "มิวเซียมสยาม", walk: "ประมาณ 2–4 นาที" }, { name: "ทางไปท่าราชินี", destination: "ท่าเรือและปากคลองตลาด", walk: "ประมาณ 4–8 นาที" }], facilities: ["ลิฟต์", "ห้องน้ำ", "แท็กซี่", "ท่าเรือใกล้เคียง"], confidence: "ควรตรวจป้าย", checked: "30 ก.ค. 2569" },
+  "arl|สุวรรณภูมิ": { exits: [{ name: "ทางเชื่อมอาคารผู้โดยสาร", destination: "ชั้นใต้ดินสนามบินสุวรรณภูมิ", walk: "ประมาณ 3–8 นาที" }], facilities: ["ลิฟต์", "ห้องน้ำ", "แท็กซี่", "รถรับส่งสนามบิน", "พื้นที่กระเป๋าเดินทาง"], confidence: "ยืนยันสูง", checked: "30 ก.ค. 2569" },
 };
 
 const routeNodes = railLines.flatMap((routeLine) => routeLine.stations.map((routeStation, stationIndex) => ({
@@ -587,6 +599,7 @@ export default function Home() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [savedAccessPoints, setSavedAccessPoints] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   const [alertFeed, setAlertFeed] = useState<ServiceAlertFeed>({ alerts: [], crowdReports: [], generatedAt: "" });
   const [alertStatus, setAlertStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -600,6 +613,7 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem("bangkok-rail-selection");
     const savedFavorites = localStorage.getItem("bangkok-rail-favorites");
+    const savedAccess = localStorage.getItem("bangkok-rail-access-points");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -612,6 +626,9 @@ export default function Home() {
     }
     if (savedFavorites) {
       try { setFavorites(JSON.parse(savedFavorites)); } catch {}
+    }
+    if (savedAccess) {
+      try { setSavedAccessPoints(JSON.parse(savedAccess)); } catch {}
     }
     setReady(true);
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => undefined);
@@ -730,6 +747,9 @@ export default function Home() {
     ...pairedRailConnections,
   ].filter((item, index, items) => items.findIndex((candidate) => candidate.line.id === item.line.id && candidate.station === item.station) === index);
   const selectedSurfaceConnections = surfaceConnections[`${mapLine.id}|${mapStation}`] ?? {};
+  const stationGuideKey = `${mapLine.id}|${mapStation}`;
+  const selectedStationGuide = stationGuides[stationGuideKey];
+  const accessPointSaved = savedAccessPoints.includes(stationGuideKey);
 
   function selectLine(nextLine: RailLine) {
     setLineId(nextLine.id);
@@ -754,6 +774,12 @@ export default function Home() {
     setMapLineId(nextLineId);
     setMapStation(nextStation);
     setMapMode("nearby");
+  }
+
+  function toggleSavedAccessPoint() {
+    const next = accessPointSaved ? savedAccessPoints.filter((item) => item !== stationGuideKey) : [...savedAccessPoints, stationGuideKey];
+    setSavedAccessPoints(next);
+    localStorage.setItem("bangkok-rail-access-points", JSON.stringify(next));
   }
 
   function toggleFavorite() {
@@ -917,6 +943,15 @@ export default function Home() {
                   {selectedSurfaceConnections.other?.length ? <article><i>🚐</i><div><small>บริการเชื่อมต่ออื่น</small><ul>{selectedSurfaceConnections.other.map((item) => <li key={item}>{item}</li>)}</ul></div></article> : null}
                 </div>
                 <p>หมายเลขรถโดยสารและรอบเรืออาจเปลี่ยนตามการปรับเส้นทางหรือช่วงเวลา โปรดตรวจป้าย ณ จุดขึ้นและแอปของผู้ให้บริการอีกครั้ง</p>
+              </section>
+
+              <section className="station-guide-card" aria-label="คู่มือใช้งานสถานี">
+                <header><div><p className="eyebrow dark">STATION GUIDE</p><h3>ลงทางไหน เดินกี่นาที</h3></div><button className={accessPointSaved ? "saved" : ""} onClick={toggleSavedAccessPoint}>{accessPointSaved ? "★ บันทึกแล้ว" : "☆ บันทึกสถานีนี้"}</button></header>
+                {selectedStationGuide ? <>
+                  <div className="exit-guide-list">{selectedStationGuide.exits.map((exit) => <article key={`${exit.name}-${exit.destination}`}><b>{exit.name}</b><div><strong>{exit.destination}</strong><span>เดิน {exit.walk}</span></div><a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(exit.destination)}&travelmode=walking`} target="_blank" rel="noreferrer">นำทาง ↗</a></article>)}</div>
+                  <div className="facility-list"><small>สิ่งอำนวยความสะดวกที่พบ</small><p>{selectedStationGuide.facilities.map((facility) => <span key={facility}>{facility}</span>)}</p></div>
+                  <div className="guide-freshness"><span className={selectedStationGuide.confidence === "ยืนยันสูง" ? "high" : "check"}>{selectedStationGuide.confidence}</span><p>ตรวจข้อมูลล่าสุด {selectedStationGuide.checked}<small>ควรตรวจป้ายทางออกในสถานีอีกครั้ง โดยเฉพาะเมื่อมีการก่อสร้าง</small></p></div>
+                </> : <div className="guide-empty"><strong>ยังไม่มีหมายเลขทางออกที่ยืนยันสำหรับสถานีนี้</strong><span>ระบบจะไม่เดาหมายเลขทางออก กดเปิดแผนที่เพื่อดูจุดหมายและระยะเดินแทน</span><a href={mapSearchUrl} target="_blank" rel="noreferrer">ตรวจรอบสถานีบนแผนที่ ↗</a></div>}
               </section>
 
               <div className="map-actions">
