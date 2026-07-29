@@ -10,6 +10,15 @@ button { -webkit-tap-highlight-color: transparent; }
 .phone-frame { width: min(100%, 760px); min-height: 100vh; margin: 0 auto; padding-bottom: 44px; overflow: hidden; }
 .topbar { min-height: 108px; display: flex; align-items: flex-end; justify-content: space-between; padding: max(22px, env(safe-area-inset-top)) 22px 18px; color: #fff; background: var(--navy); }
 .topbar h1 { margin: 3px 0 0; font-size: 26px; letter-spacing: -0.7px; }
+.network-alert-ribbon { position: sticky; z-index: 24; top: 0; padding: 10px 12px 11px; color: #fff; background: linear-gradient(135deg, #b92f38, #7d1d27); box-shadow: 0 8px 25px #62141f4d; }
+.network-alert-title { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.network-alert-title > span { display: grid; width: 29px; height: 29px; place-items: center; border: 2px solid #fff; border-radius: 50%; font-size: 16px; font-weight: 900; }
+.network-alert-title p { display: grid; gap: 1px; margin: 0; }.network-alert-title strong { font-size: 13px; }.network-alert-title small { color: #ffdadd; font-size: 9px; }
+.network-alert-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 1px; scrollbar-width: none; scroll-snap-type: x mandatory; }.network-alert-list::-webkit-scrollbar { display: none; }
+.network-alert-list article { position: relative; flex: 0 0 min(92%, 520px); overflow: hidden; border: 1px solid #ffffff4d; border-radius: 14px; background: #fff; scroll-snap-align: start; }
+.network-alert-list article > button { display: grid; width: 100%; grid-template-columns: 35px 1fr 12px; gap: 9px; align-items: center; padding: 10px 10px 25px; border: 0; color: #18353a; background: transparent; cursor: pointer; text-align: left; }
+.network-alert-list i { display: grid; width: 35px; height: 35px; place-items: center; border-radius: 11px; color: #fff; font-size: 9px; font-style: normal; font-weight: 900; }.network-alert-list button > span { display: grid; min-width: 0; gap: 2px; }.network-alert-list button strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.network-alert-list button small { display: -webkit-box; overflow: hidden; color: #65777b; font-size: 9px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }.network-alert-list button b { color: #b62f37; font-size: 9px; }.network-alert-list button em { color: #b62f37; font-size: 22px; font-style: normal; }
+.network-alert-list article > a { position: absolute; right: 10px; bottom: 7px; color: #98303a; font-size: 8px; font-weight: 900; text-decoration: none; }
 .eyebrow { margin: 0; color: color-mix(in srgb, var(--line) 72%, white); font-size: 10px; font-weight: 800; letter-spacing: 1.7px; }
 .eyebrow.dark { color: #789094; }
 .clock { display: grid; text-align: right; }

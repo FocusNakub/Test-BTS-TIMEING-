@@ -720,6 +720,9 @@ export default function Home() {
 
   const frequency = getFrequency(line, station, now);
   const serviceAlert = alertFeed.alerts.find((alert) => alert.lineId === line.id);
+  const networkAlerts = alertFeed.alerts
+    .map((alert) => ({ alert, alertLine: railLines.find((item) => item.id === alert.lineId) }))
+    .filter((item): item is { alert: ServiceAlert; alertLine: RailLine } => Boolean(item.alertLine));
   const serviceClosed = isOutsideServiceHours(line, now);
   const serviceSuspended = Boolean(serviceAlert && /(งดให้บริการ|หยุดเดินรถ|หยุดให้บริการ|ปิดสถานี)/i.test(serviceAlert.summary));
   const trainsUnavailable = serviceClosed || serviceSuspended;
@@ -808,6 +811,34 @@ export default function Home() {
             <span>{now.toLocaleDateString("th-TH", { weekday: "short", day: "numeric", month: "short" })}</span>
           </div>
         </header>
+
+        {networkAlerts.length > 0 && (
+          <aside className="network-alert-ribbon" role="status" aria-live="polite" aria-label={`มีเหตุขัดข้อง ${networkAlerts.length} สาย`}>
+            <div className="network-alert-title">
+              <span aria-hidden="true">!</span>
+              <p><strong>มีเหตุขัดข้องขณะนี้</strong><small>{networkAlerts.length} สาย · แตะเพื่อดูรายละเอียด</small></p>
+            </div>
+            <div className="network-alert-list">
+              {networkAlerts.map(({ alert, alertLine }) => {
+                const timing = alert.delayMinutes
+                  ? alert.summary.includes("ความถี่")
+                    ? `ขบวนถัดไปตามประกาศประมาณ ${alert.delayMinutes[0]} นาที`
+                    : `ล่าช้าประมาณ ${alert.delayMinutes[0]}–${alert.delayMinutes[1]} นาที`
+                  : "ประกาศไม่ได้ระบุจำนวนนาที";
+                return (
+                  <article key={`${alert.lineId}-${alert.updatedAt}`}>
+                    <button type="button" onClick={() => { selectLine(alertLine); setActiveView("trains"); }}>
+                      <i style={{ background: alertLine.color }}>{alertLine.short}</i>
+                      <span><strong>{alertLine.name} · {alert.affectedArea}</strong><small>{alert.summary}</small><b>{timing}</b></span>
+                      <em aria-hidden="true">›</em>
+                    </button>
+                    <a href={alert.sourceUrl} target="_blank" rel="noreferrer" aria-label={`ดูประกาศต้นทางของ ${alertLine.name}`}>ประกาศต้นทาง ↗</a>
+                  </article>
+                );
+              })}
+            </div>
+          </aside>
+        )}
 
         <nav className="line-strip" aria-label="เลือกสายรถไฟฟ้า">
           {railLines.map((item) => (
