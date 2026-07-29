@@ -59,6 +59,12 @@ type CrowdReport = {
   sourceUrl: string;
 };
 
+type EnvironmentFeed = {
+  generatedAt: string;
+  weather?: { status: "ready"; temperatureC: number; feelsLikeC: number; rainMm: number; description: string; observedAt: string };
+  traffic?: { status: "ready"; incidentCount: number; severeCount: number; summary: string; observedAt: string };
+};
+
 const railLines: RailLine[] = [
   {
     id: "bts-sukhumvit", short: "BTS", name: "สายสุขุมวิท", color: "#5fbf4a", soft: "#e9f7e6",
@@ -338,6 +344,7 @@ const nightlifeStations = new Set(["นานา", "อโศก", "พร้อ
 const eventStations = new Set(["สนามกีฬาแห่งชาติ", "เมืองทองธานี", "สวนจตุจักร", "หมอชิต", "ศูนย์การประชุมฯ", "ราชมังคลาฯ", "รามคำแหง"]);
 
 const alertFeedUrl = process.env.NEXT_PUBLIC_ALERT_FEED_URL || "/api/service-alerts";
+const environmentFeedUrl = process.env.NEXT_PUBLIC_ENVIRONMENT_FEED_URL || "./environment-status.json";
 
 const operatorSources: Record<string, { name: string; url: string }> = {
   "bts-sukhumvit": { name: "BTS SkyTrain", url: "https://www.facebook.com/BTSSkyTrain/" },
@@ -606,6 +613,8 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [alertFeed, setAlertFeed] = useState<ServiceAlertFeed>({ alerts: [], crowdReports: [], generatedAt: "" });
   const [alertStatus, setAlertStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [environmentFeed, setEnvironmentFeed] = useState<EnvironmentFeed>({ generatedAt: "" });
+  const [environmentStatus, setEnvironmentStatus] = useState<"loading" | "ready" | "unavailable">("loading");
 
   const line = railLines.find((item) => item.id === lineId) ?? railLines[0];
   const mapLine = railLines.find((item) => item.id === mapLineId) ?? railLines[0];
@@ -663,6 +672,26 @@ export default function Home() {
     }
     loadAlerts();
     const timer = window.setInterval(loadAlerts, 5 * 60 * 1000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    async function loadEnvironment() {
+      try {
+        const response = await fetch(`${environmentFeedUrl}?t=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Environment feed HTTP ${response.status}`);
+        const data = await response.json() as EnvironmentFeed;
+        if (active) {
+          setEnvironmentFeed(data);
+          setEnvironmentStatus(data.weather || data.traffic ? "ready" : "unavailable");
+        }
+      } catch {
+        if (active) setEnvironmentStatus("unavailable");
+      }
+    }
+    loadEnvironment();
+    const timer = window.setInterval(loadEnvironment, 60 * 60 * 1000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 
@@ -1079,6 +1108,24 @@ export default function Home() {
               </div>
             </article>
           )}
+        </section>
+
+        <section className="journey-conditions" aria-label="สภาพก่อนออกเดินทาง">
+          <div className="journey-conditions-head">
+            <div><p className="eyebrow dark">BEFORE YOU GO</p><h2>ก่อนออกเดินทาง</h2></div>
+            <span>อัปเดตทุก 1 ชั่วโมง</span>
+          </div>
+          <div className="condition-grid">
+            <article>
+              <b aria-hidden="true">☂</b>
+              <div><small>อากาศกรุงเทพฯ</small><strong>{environmentFeed.weather ? `${Math.round(environmentFeed.weather.temperatureC)}°C · ${environmentFeed.weather.description}` : environmentStatus === "loading" ? "กำลังตรวจ…" : "ยังไม่มีข้อมูลสด"}</strong><span>{environmentFeed.weather ? environmentFeed.weather.rainMm > 0 ? `พบฝน ${environmentFeed.weather.rainMm.toFixed(1)} มม.` : "ยังไม่พบฝนจากจุดตรวจ" : "รอเชื่อม OpenWeather แบบฟรี"}</span></div>
+            </article>
+            <article>
+              <b aria-hidden="true">!</b>
+              <div><small>ถนนรอบกรุงเทพฯ</small><strong>{environmentFeed.traffic ? environmentFeed.traffic.summary : environmentStatus === "loading" ? "กำลังตรวจ…" : "ยังไม่มีข้อมูลสด"}</strong><span>{environmentFeed.traffic ? `พบเหตุบนถนน ${environmentFeed.traffic.incidentCount} จุด · รุนแรง ${environmentFeed.traffic.severeCount} จุด` : "รอเชื่อม TomTom แบบฟรี"}</span></div>
+            </article>
+          </div>
+          <p>ข้อมูลส่วนนี้ช่วยประเมินการเดินทางไป–กลับสถานี ไม่ใช่ตำแหน่งหรือสถานะขบวนรถไฟ</p>
         </section>
 
         <section className="arrivals" aria-label="ขบวนถัดไปโดยประมาณ">

@@ -6,6 +6,7 @@ on:
     paths:
       - "source/**"
       - "service-alerts.json"
+      - "environment-status.json"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
@@ -38,10 +39,12 @@ jobs:
         working-directory: source
         env:
           NEXT_PUBLIC_ALERT_FEED_URL: /Test-BTS-TIMEING-/service-alerts.json
+          NEXT_PUBLIC_ENVIRONMENT_FEED_URL: /Test-BTS-TIMEING-/environment-status.json
         run: |
           mv app/api "$RUNNER_TEMP/site-api"
           GITHUB_PAGES=1 pnpm exec next build
           cp ../service-alerts.json out/service-alerts.json
+          cp ../environment-status.json out/environment-status.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

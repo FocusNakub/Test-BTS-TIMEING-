@@ -1,0 +1,41 @@
+name: Update weather and road conditions
+
+on:
+  schedule:
+    # Asia/Bangkok: hourly from 05:00 through 00:00. Rail news remains every 15 minutes.
+    - cron: "0 22 * * *"
+    - cron: "0 23,0-17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hourly-environment-status
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fetch optional free-tier data once
+        env:
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+        run: node scripts/update-environment-status.mjs
+      - name: Publish only a successful change
+        run: |
+          if git diff --quiet -- public/environment-status.json environment-status.json; then
+            echo "No environment change"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/environment-status.json environment-status.json
+          git commit -m "Update hourly weather and road conditions"
+          git push

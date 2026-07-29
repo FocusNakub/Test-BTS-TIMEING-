@@ -1,4 +1,4 @@
-const CACHE = "bangkok-rail-daily-v11";
+const CACHE = "bangkok-rail-daily-v12";
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["./bangkok-rail-map.webp"])));
@@ -14,7 +14,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(event.request, { cache: "no-store" }).catch(() => caches.match("./")));
     return;
   }
-  if (new URL(event.request.url).pathname.endsWith("/service-alerts.json")) {
+  if (/\/(service-alerts|environment-status)\.json$/.test(new URL(event.request.url).pathname)) {
     event.respondWith(fetch(event.request, { cache: "no-store" }));
     return;
   }

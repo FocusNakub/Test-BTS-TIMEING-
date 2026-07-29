@@ -144,6 +144,18 @@ button { -webkit-tap-highlight-color: transparent; }
 .service-alert-summary { color: #35484d !important; font-size: 11px !important; font-weight: 700; }
 .service-alert-copy span { margin-top: 4px; color: #697b80; font-size: 10px; line-height: 1.45; }
 .service-alert-copy a { width: fit-content; margin-top: 8px; color: var(--line); font-size: 10px; font-weight: 800; text-decoration: none; }
+.journey-conditions { padding: 20px 18px 0; }
+.journey-conditions-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.journey-conditions-head h2 { margin: 2px 0 0; font-size: 19px; }
+.journey-conditions-head > span { color: #718287; font-size: 9px; }
+.condition-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.condition-grid article { display: grid; grid-template-columns: 34px 1fr; gap: 9px; min-width: 0; padding: 12px; border: 1px solid #d9e3df; border-radius: 16px; background: #fff; box-shadow: 0 6px 20px #1731350a; }
+.condition-grid article > b { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; color: #fff; background: var(--navy); font-size: 16px; }
+.condition-grid article > div { display: grid; min-width: 0; align-content: start; }
+.condition-grid small { color: #718287; font-size: 8px; font-weight: 900; }
+.condition-grid strong { margin-top: 2px; overflow: hidden; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; }
+.condition-grid span { margin-top: 3px; color: #77888c; font-size: 8px; line-height: 1.4; }
+.journey-conditions > p { margin: 8px 2px 0; color: #7b8a8e; font-size: 8px; line-height: 1.45; }
 .arrivals, .density-section, .favorites-section { padding: 26px 18px 0; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 13px; }
 .section-heading h2 { margin: 2px 0 0; font-size: 21px; letter-spacing: -0.4px; }
@@ -233,3 +245,4 @@ footer p { margin: 4px 0; font-size: 9px; line-height: 1.4; }
 @media (max-width: 520px) { .mode-switch button { padding: 5px 2px; font-size: 10px; }.route-fields { grid-template-columns: 1fr 34px 1fr; gap: 5px; }.route-fields select { padding: 0 7px; font-size: 11px; }.swap-route { width: 34px; height: 34px; }.route-summary div { padding: 11px 7px; }.route-summary strong { font-size: 17px; }.route-summary div:first-child strong { font-size: 21px; }.rail-map-page { padding: 14px 12px 22px; }.map-heading { display: grid; }.map-heading h2 { font-size: 22px; }.map-controls { width: fit-content; }.map-station-fields { grid-template-columns: 1fr 1fr; gap: 6px; }.map-station-fields select { padding: 0 7px; font-size: 9px; }.nearby-category-grid { grid-template-columns: 1fr 1fr; }.interactive-map-card iframe { height: 34vh; min-height: 240px; }.map-location-title { padding: 9px 10px; }.station-info-tabs button { grid-template-columns: 24px 1fr; padding: 4px; }.station-info-tabs button > b { width: 24px; height: 24px; }.station-info-tabs button small { display: none; }.rail-map-viewport { height: 62vh; }.map-actions { grid-template-columns: 1fr 1fr; }.map-actions button, .map-actions a { min-height: 40px; padding: 7px; font-size: 8px; }.disclaimer-backdrop { padding-inline: 12px; }.disclaimer-dialog { max-height: 92vh; padding: 19px 16px 16px; border-radius: 22px; }.disclaimer-symbol { width: 38px; height: 38px; margin-bottom: 11px; }.disclaimer-dialog h2 { font-size: 22px; }.disclaimer-lead { margin: 8px 0 13px; }.disclaimer-points { gap: 6px; }.disclaimer-points > div { padding: 8px 9px; }.disclaimer-important { margin: 9px 0; } }
 @media (max-width: 360px) { .topbar h1 { font-size: 22px; }.station-button strong { font-size: 31px; }.line-strip { padding-left: 14px; }.arrival-card { grid-template-columns: 38px 1fr auto; gap: 9px; padding: 12px; }.direction-mark { width: 38px; height: 38px; }.countdown strong { font-size: 22px; }.route-fields { grid-template-columns: 1fr; }.swap-route { margin: 0 auto; transform: rotate(90deg); }.route-preferences { grid-template-columns: 1fr; }.route-summary { grid-template-columns: 1fr 1fr; }.route-summary div:nth-child(2) { border-right: 0; }.route-summary div:nth-child(-n+2) { border-bottom: 1px solid #ffffff1c; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
+@media (max-width: 440px) { .condition-grid { grid-template-columns: 1fr; } }
