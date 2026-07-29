@@ -2,6 +2,64 @@ name: Cloud rail monitor and publish
 
 on:
   schedule:
+    # Asia/Bangkok: every 5 minutes from 05:30–00:25; pause 00:30–05:00.
+    - cron: "30-59/5 22 * * *"
+    - cron: "*/5 23,0-16 * * *"
+    - cron: "0-25/5 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rail-service-alerts
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install monitor browser
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Check rail disruption announcements
+        env:
+          ALERT_UPDATE_URL: https://bangkok-rail-daily-2026.pp5074160.chatgpt.site/api/service-alerts/update
+          ALERT_UPDATE_TOKEN: ${{ secrets.ALERT_UPDATE_TOKEN }}
+          SITES_BYPASS_TOKEN: ${{ secrets.SITES_BYPASS_TOKEN }}
+        run: node scripts/cloud-monitor.mjs
+      - name: Fetch live alert status
+        env:
+          SITES_BYPASS_TOKEN: ${{ secrets.SITES_BYPASS_TOKEN }}
+        run: |
+          curl --fail --silent --show-error \
+            "https://bangkok-rail-daily-2026.pp5074160.chatgpt.site/api/service-alerts" \
+            -H "OAI-Sites-Authorization: Bearer $SITES_BYPASS_TOKEN" \
+            --output /tmp/service-alerts.json
+          jq -e '.alerts | type == "array"' /tmp/service-alerts.json >/dev/null
+      - name: Publish changed alerts
+        run: |
+          if diff -q <(jq -S '.alerts' /tmp/service-alerts.json) <(jq -S '.alerts' service-alerts.json) >/dev/null; then
+            echo "No alert change"
+            exit 0
+          fi
+          cp /tmp/service-alerts.json service-alerts.json
+          cp /tmp/service-alerts.json public/service-alerts.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add service-alerts.json public/service-alerts.json
+          git commit -m "Sync rail service alerts"
+          git push
+name: Cloud rail monitor and publish
+
+on:
+  schedule:
     # Asia/Bangkok: hourly from 06:00–00:00; the script also enforces the 00:30–05:00 pause.
     - cron: "0 23,0-17 * * *"
   workflow_dispatch:
