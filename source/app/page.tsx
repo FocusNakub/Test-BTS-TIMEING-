@@ -16,11 +16,13 @@ type RailLine = {
 
 type RouteNode = { id: string; lineId: string; station: string; stationIndex: number };
 type RouteEdge = { to: string; transfer: boolean };
+type RoutePreference = "fastest" | "cheapest" | "fewest-transfers";
 type RoutePlan = {
   nodes: RouteNode[];
   stations: number;
   transfers: number;
   fare: number;
+  duration: number;
   segments: { line: RailLine; from: string; to: string; stations: number }[];
 };
 
@@ -172,7 +174,37 @@ function estimateSegmentFare(group: string, stations: number) {
   return 0;
 }
 
-function planRoute(startId: string, endId: string): RoutePlan | null {
+function averageMinutesPerStation(lineId: string) {
+  if (lineId === "arl") return 4.5;
+  if (lineId.startsWith("red-")) return 3.2;
+  if (lineId === "mrt-blue" || lineId === "mrt-purple") return 2.5;
+  if (lineId === "mrt-yellow" || lineId === "mrt-pink") return 2.3;
+  if (lineId === "gold") return 2.5;
+  return 2.1;
+}
+
+function fareEntry(group: string) {
+  return ({ bts: 17, gold: 16, bem: 17, monorail: 15, red: 12, arl: 15 } as Record<string, number>)[group] ?? 0;
+}
+
+function farePerStation(group: string) {
+  return ({ bts: 3, gold: 0.5, bem: 2, monorail: 3, red: 4, arl: 5 } as Record<string, number>)[group] ?? 1;
+}
+
+function routeEdgeScore(fromId: string, edge: RouteEdge, preference: RoutePreference) {
+  const from = routeNodes.find((node) => node.id === fromId)!;
+  const to = routeNodes.find((node) => node.id === edge.to)!;
+  const fromGroup = operatorGroup(from.lineId);
+  const toGroup = operatorGroup(to.lineId);
+  if (preference === "fewest-transfers") return edge.transfer ? 1000 : averageMinutesPerStation(from.lineId);
+  if (preference === "cheapest") {
+    if (edge.transfer) return fromGroup === toGroup ? 0.1 : fareEntry(toGroup);
+    return farePerStation(fromGroup) + averageMinutesPerStation(from.lineId) / 100;
+  }
+  return edge.transfer ? 7 : averageMinutesPerStation(from.lineId);
+}
+
+function planRoute(startId: string, endId: string, preference: RoutePreference): RoutePlan | null {
   if (startId === endId) return null;
   const best = new Map<string, number>([[startId, 0]]);
   const previous = new Map<string, { id: string; transfer: boolean }>();
@@ -183,7 +215,7 @@ function planRoute(startId: string, endId: string): RoutePlan | null {
     if (current.id === endId) break;
     if (current.score !== best.get(current.id)) continue;
     for (const edge of plannerGraph.get(current.id) ?? []) {
-      const score = current.score + (edge.transfer ? 7 : 10);
+      const score = current.score + routeEdgeScore(current.id, edge, preference);
       if (score < (best.get(edge.to) ?? Number.POSITIVE_INFINITY)) {
         best.set(edge.to, score);
         previous.set(edge.to, { id: current.id, transfer: edge.transfer });
@@ -202,14 +234,17 @@ function planRoute(startId: string, endId: string): RoutePlan | null {
   const segments: RoutePlan["segments"] = [];
   let stations = 0;
   let transfers = 0;
+  let duration = 0;
   nodes.forEach((node, index) => {
     if (index === 0) return;
     const prior = nodes[index - 1];
     if (prior.lineId !== node.lineId) {
       transfers += 1;
+      duration += 7;
       return;
     }
     stations += 1;
+    duration += averageMinutesPerStation(prior.lineId);
     const last = segments[segments.length - 1];
     if (last?.line.id === node.lineId) {
       last.to = node.station;
@@ -231,7 +266,7 @@ function planRoute(startId: string, endId: string): RoutePlan | null {
     groupStations += segment.stations;
     if (index === segments.length - 1) fare += estimateSegmentFare(activeGroup, groupStations);
   });
-  return { nodes, stations, transfers, fare, segments };
+  return { nodes, stations, transfers, fare, duration: Math.ceil(duration), segments };
 }
 
 const interchangeStations = new Set(["สยาม", "อโศก", "สุขุมวิท", "หมอชิต", "สวนจตุจักร", "ศาลาแดง", "สีลม", "บางหว้า", "พญาไท", "สำโรง", "วัดพระศรีมหาธาตุ", "เตาปูน", "ท่าพระ", "หลักสี่", "หัวหมาก", "มักกะสัน", "กรุงธนบุรี", "กรุงเทพอภิวัฒน์", "บางซ่อน", "ลาดพร้าว", "ห้าแยกลาดพร้าว", "พหลโยธิน", "ศูนย์ราชการนนทบุรี"]);
@@ -492,6 +527,7 @@ export default function Home() {
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [routeStart, setRouteStart] = useState(stationNodeId("bts-sukhumvit", "อโศก"));
   const [routeEnd, setRouteEnd] = useState(stationNodeId("arl", "สุวรรณภูมิ"));
+  const [routePreference, setRoutePreference] = useState<RoutePreference>("fastest");
   const [lineId, setLineId] = useState("bts-sukhumvit");
   const [station, setStation] = useState("อโศก");
   const [now, setNow] = useState(new Date());
@@ -581,7 +617,7 @@ export default function Home() {
     .filter((report) => Math.abs(line.stations.indexOf(report.station) - stationIndex) <= 7)
     .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime())[0];
   const operatorSource = operatorSources[line.id];
-  const routePlan = useMemo(() => planRoute(routeStart, routeEnd), [routeStart, routeEnd]);
+  const routePlan = useMemo(() => planRoute(routeStart, routeEnd, routePreference), [routeStart, routeEnd, routePreference]);
 
   function selectLine(nextLine: RailLine) {
     setLineId(nextLine.id);
@@ -667,10 +703,17 @@ export default function Home() {
               </label>
             </div>
 
+            <div className="route-preferences" role="radiogroup" aria-label="รูปแบบเส้นทาง">
+              <button className={routePreference === "fastest" ? "active" : ""} onClick={() => setRoutePreference("fastest")} role="radio" aria-checked={routePreference === "fastest"}>⚡ เร็วที่สุด</button>
+              <button className={routePreference === "cheapest" ? "active" : ""} onClick={() => setRoutePreference("cheapest")} role="radio" aria-checked={routePreference === "cheapest"}>฿ ประหยัดที่สุด</button>
+              <button className={routePreference === "fewest-transfers" ? "active" : ""} onClick={() => setRoutePreference("fewest-transfers")} role="radio" aria-checked={routePreference === "fewest-transfers"}>⇄ เปลี่ยนน้อยสุด</button>
+            </div>
+
             {routePlan ? (
               <div className="route-result" aria-live="polite">
                 <div className="route-summary">
                   <div><small>ค่าโดยสารประมาณ</small><strong>฿{routePlan.fare}</strong></div>
+                  <div><small>เวลาโดยประมาณ</small><strong>{routePlan.duration}<em> นาที</em></strong></div>
                   <div><small>จำนวนสถานี</small><strong>{routePlan.stations}</strong></div>
                   <div><small>เปลี่ยนสาย</small><strong>{routePlan.transfers}</strong></div>
                 </div>
