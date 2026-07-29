@@ -40,6 +40,7 @@ jobs:
         env:
           NEXT_PUBLIC_ALERT_FEED_URL: /Test-BTS-TIMEING-/service-alerts.json
           NEXT_PUBLIC_ENVIRONMENT_FEED_URL: /Test-BTS-TIMEING-/environment-status.json
+          NEXT_PUBLIC_PUSH_SUBSCRIBE_URL: https://bangkok-rail-daily-2026.pp5074160.chatgpt.site/api/push/subscribe
         run: |
           mv app/api "$RUNNER_TEMP/site-api"
           GITHUB_PAGES=1 pnpm exec next build

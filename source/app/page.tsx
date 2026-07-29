@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getApps, initializeApp } from "firebase/app";
+import { getMessaging, getToken, isSupported as isMessagingSupported } from "firebase/messaging";
 
 type RailLine = {
   id: string;
@@ -345,6 +347,16 @@ const eventStations = new Set(["สนามกีฬาแห่งชาติ
 
 const alertFeedUrl = process.env.NEXT_PUBLIC_ALERT_FEED_URL || "/api/service-alerts";
 const environmentFeedUrl = process.env.NEXT_PUBLIC_ENVIRONMENT_FEED_URL || "./environment-status.json";
+const pushSubscribeUrl = process.env.NEXT_PUBLIC_PUSH_SUBSCRIBE_URL || "/api/push/subscribe";
+const firebaseConfig = {
+  apiKey: "AIzaSyBRy3AHKwcNXwjTljjV0U4rWdxoF6KBTtw",
+  authDomain: "bangkok-rail-daily-ee38c.firebaseapp.com",
+  projectId: "bangkok-rail-daily-ee38c",
+  storageBucket: "bangkok-rail-daily-ee38c.firebasestorage.app",
+  messagingSenderId: "5389290383",
+  appId: "1:5389290383:web:babc8965e8eb6cbdb0d9fa",
+};
+const firebaseVapidKey = "BIVrJ56oPEiGnE1NV2T8IQ3YLs2l-QmGHxcmPbg8iUVnshCsEcpdpnobnXDELkBjpZmgLj6KYfb9p4HOPttuqAY";
 
 const operatorSources: Record<string, { name: string; url: string }> = {
   "bts-sukhumvit": { name: "BTS SkyTrain", url: "https://www.facebook.com/BTSSkyTrain/" },
@@ -615,6 +627,7 @@ export default function Home() {
   const [alertStatus, setAlertStatus] = useState<"loading" | "ready" | "error">("loading");
   const [environmentFeed, setEnvironmentFeed] = useState<EnvironmentFeed>({ generatedAt: "" });
   const [environmentStatus, setEnvironmentStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [notificationStatus, setNotificationStatus] = useState<"idle" | "enabling" | "enabled" | "denied" | "unsupported">("idle");
 
   const line = railLines.find((item) => item.id === lineId) ?? railLines[0];
   const mapLine = railLines.find((item) => item.id === mapLineId) ?? railLines[0];
@@ -643,12 +656,43 @@ export default function Home() {
       try { setSavedAccessPoints(JSON.parse(savedAccess)); } catch {}
     }
     setReady(true);
+    if (typeof Notification !== "undefined") {
+      setNotificationStatus(Notification.permission === "granted" && localStorage.getItem("bangkok-rail-push-enabled") === "1" ? "enabled" : Notification.permission === "denied" ? "denied" : "idle");
+    } else {
+      setNotificationStatus("unsupported");
+    }
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
         .then((registration) => registration.update())
         .catch(() => undefined);
     }
   }, []);
+
+  async function enableNotifications() {
+    setNotificationStatus("enabling");
+    try {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !(await isMessagingSupported())) {
+        setNotificationStatus("unsupported");
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setNotificationStatus("denied");
+        return;
+      }
+      const registration = await navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" });
+      await registration.update();
+      const app = getApps()[0] || initializeApp(firebaseConfig);
+      const token = await getToken(getMessaging(app), { vapidKey: firebaseVapidKey, serviceWorkerRegistration: registration });
+      if (!token) throw new Error("No messaging token");
+      const response = await fetch(pushSubscribeUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, platform: navigator.userAgent.slice(0, 80) }) });
+      if (!response.ok) throw new Error(`Subscribe HTTP ${response.status}`);
+      localStorage.setItem("bangkok-rail-push-enabled", "1");
+      setNotificationStatus("enabled");
+    } catch {
+      setNotificationStatus(Notification.permission === "denied" ? "denied" : "idle");
+    }
+  }
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -1075,6 +1119,9 @@ export default function Home() {
               {isFavorite ? "★ ปักหมุดแล้ว" : "☆ ปักหมุดสถานี"}
             </button>
             <button className="mini-action" onClick={() => setNow(new Date())}>↻ อัปเดต</button>
+            <button className={notificationStatus === "enabled" ? "mini-action saved" : "mini-action"} onClick={enableNotifications} disabled={notificationStatus === "enabling" || notificationStatus === "enabled"}>
+              {notificationStatus === "enabled" ? "🔔 แจ้งเตือนแล้ว" : notificationStatus === "enabling" ? "กำลังเปิด…" : notificationStatus === "denied" ? "ปิดอยู่ในการตั้งค่า" : notificationStatus === "unsupported" ? "เครื่องไม่รองรับ" : "🔔 เปิดแจ้งเตือน"}
+            </button>
           </div>
         </section>
 

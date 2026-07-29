@@ -1,7 +1,8 @@
-import { inArray, lt } from "drizzle-orm";
+import { eq, inArray, lt } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getDb } from "@/db";
 import { crowdReports, serviceAlerts } from "@/db/schema";
+import { sendPush } from "@/lib/firebase-push";
 
 const validLineIds = new Set([
   "bts-sukhumvit", "bts-silom", "gold", "mrt-blue", "mrt-purple",
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
   const now = new Date();
   const db = getDb();
   const accepted: string[] = [];
+  const changedAlerts: Array<{ lineId: string; affectedArea: string; summary: string }> = [];
   for (const raw of Array.isArray(body.alerts) ? body.alerts : []) {
     const lineId = text(raw.lineId, 40);
     const affectedArea = text(raw.affectedArea, 160);
@@ -73,9 +75,14 @@ export async function POST(request: Request) {
     const delay = Array.isArray(raw.delayMinutes) && raw.delayMinutes.length === 2 ? raw.delayMinutes.map(Number) : null;
     const delayMin = delay && Number.isFinite(delay[0]) && delay[0] >= 0 && delay[0] <= 180 ? Math.round(delay[0]) : null;
     const delayMax = delay && Number.isFinite(delay[1]) && delay[1] >= (delayMin ?? 0) && delay[1] <= 180 ? Math.round(delay[1]) : null;
+    const previous = await db.select().from(serviceAlerts).where(eq(serviceAlerts.lineId, lineId)).limit(1);
     const values = { lineId, affectedArea, summary, delayMin, delayMax, updatedAt, expiresAt, sourceName, sourceUrl };
     await db.insert(serviceAlerts).values(values).onConflictDoUpdate({ target: serviceAlerts.lineId, set: values });
     accepted.push(lineId);
+    const old = previous[0];
+    if (!old || old.summary !== summary || old.affectedArea !== affectedArea || old.delayMin !== delayMin || old.delayMax !== delayMax) {
+      changedAlerts.push({ lineId, affectedArea, summary });
+    }
   }
 
   const resolved = (Array.isArray(body.resolvedLineIds) ? body.resolvedLineIds : [])
@@ -105,5 +112,22 @@ export async function POST(request: Request) {
   if (resolvedCrowdReportIds.length) await db.delete(crowdReports).where(inArray(crowdReports.id, resolvedCrowdReportIds));
   await db.delete(serviceAlerts).where(lt(serviceAlerts.expiresAt, now));
   await db.delete(crowdReports).where(lt(crowdReports.expiresAt, now));
-  return Response.json({ ok: true, accepted, resolved, acceptedCrowdReports, resolvedCrowdReportIds });
+  const pushResults = [];
+  for (const alert of changedAlerts) {
+    pushResults.push(await sendPush({
+      title: `แจ้งเหตุรถไฟฟ้า · ${alert.affectedArea}`,
+      body: alert.summary,
+      url: "/Test-BTS-TIMEING-/",
+      tag: `rail-alert-${alert.lineId}`,
+    }));
+  }
+  for (const lineId of resolved) {
+    pushResults.push(await sendPush({
+      title: "การเดินรถกลับสู่ภาวะปกติ",
+      body: `ประกาศเหตุของ ${lineId} ได้รับการยกเลิกแล้ว`,
+      url: "/Test-BTS-TIMEING-/",
+      tag: `rail-alert-${lineId}`,
+    }));
+  }
+  return Response.json({ ok: true, accepted, resolved, acceptedCrowdReports, resolvedCrowdReportIds, pushResults });
 }
