@@ -18,6 +18,8 @@ type RouteNode = { id: string; lineId: string; station: string; stationIndex: nu
 type RouteEdge = { to: string; transfer: boolean };
 type RoutePreference = "fastest" | "cheapest" | "fewest-transfers";
 type ViewMode = "trains" | "planner" | "map";
+type MapMode = "nearby" | "network";
+type MapLocation = { lat: number; lon: number; label: string };
 type RoutePlan = {
   nodes: RouteNode[];
   stations: number;
@@ -108,6 +110,33 @@ const railLines: RailLine[] = [
     stations: ["พญาไท", "ราชปรารภ", "มักกะสัน", "รามคำแหง", "หัวหมาก", "บ้านทับช้าง", "ลาดกระบัง", "สุวรรณภูมิ"]
   }
 ];
+
+const knownStationLocations: Record<string, MapLocation> = {
+  "bts-sukhumvit|อโศก": { lat: 13.7369, lon: 100.5605, label: "สถานีอโศก · ถนนสุขุมวิท" },
+  "bts-sukhumvit|สยาม": { lat: 13.7456, lon: 100.5342, label: "สถานีสยาม · ปทุมวัน" },
+  "bts-sukhumvit|หมอชิต": { lat: 13.8025, lon: 100.5538, label: "สถานีหมอชิต · สวนจตุจักร" },
+  "bts-sukhumvit|พญาไท": { lat: 13.7568, lon: 100.5337, label: "สถานีพญาไท · ราชเทวี" },
+  "bts-silom|ศาลาแดง": { lat: 13.7286, lon: 100.5341, label: "สถานีศาลาแดง · สีลม" },
+  "bts-silom|บางหว้า": { lat: 13.7209, lon: 100.4570, label: "สถานีบางหว้า · ภาษีเจริญ" },
+  "mrt-blue|เตาปูน": { lat: 13.8063, lon: 100.5311, label: "สถานีเตาปูน · บางซื่อ" },
+  "mrt-blue|สุขุมวิท": { lat: 13.7385, lon: 100.5614, label: "สถานีสุขุมวิท · อโศก" },
+  "mrt-blue|สวนจตุจักร": { lat: 13.8023, lon: 100.5536, label: "สถานีสวนจตุจักร" },
+  "red-dark|กรุงเทพอภิวัฒน์": { lat: 13.8067, lon: 100.5407, label: "สถานีกลางกรุงเทพอภิวัฒน์" },
+  "arl|พญาไท": { lat: 13.7567, lon: 100.5340, label: "Airport Rail Link พญาไท" },
+  "arl|มักกะสัน": { lat: 13.7511, lon: 100.5612, label: "Airport Rail Link มักกะสัน" },
+  "arl|หัวหมาก": { lat: 13.7380, lon: 100.6451, label: "Airport Rail Link หัวหมาก" },
+  "arl|สุวรรณภูมิ": { lat: 13.6900, lon: 100.7501, label: "Airport Rail Link สุวรรณภูมิ" },
+};
+
+const popularMapStations = [
+  ["bts-sukhumvit", "สยาม"], ["bts-sukhumvit", "อโศก"], ["bts-sukhumvit", "หมอชิต"],
+  ["bts-silom", "ศาลาแดง"], ["mrt-blue", "เตาปูน"], ["red-dark", "กรุงเทพอภิวัฒน์"],
+] as const;
+
+const nearbyCategories = [
+  ["🍜", "ร้านอาหาร"], ["🛍", "ห้างและร้านค้า"], ["🏥", "โรงพยาบาล"],
+  ["🏨", "โรงแรม"], ["🌳", "สวนและที่เที่ยว"], ["☕", "คาเฟ่"],
+] as const;
 
 const routeNodes = railLines.flatMap((routeLine) => routeLine.stations.map((routeStation, stationIndex) => ({
   id: `${routeLine.id}:${stationIndex}`,
@@ -526,7 +555,12 @@ function crowdLabel(value: number) {
 
 export default function Home() {
   const [activeView, setActiveView] = useState<ViewMode>("trains");
+  const [mapMode, setMapMode] = useState<MapMode>("nearby");
   const [mapZoom, setMapZoom] = useState(1);
+  const [mapLineId, setMapLineId] = useState("bts-sukhumvit");
+  const [mapStation, setMapStation] = useState("อโศก");
+  const [mapLocation, setMapLocation] = useState<MapLocation>(knownStationLocations["bts-sukhumvit|อโศก"]);
+  const [mapLocationStatus, setMapLocationStatus] = useState<"ready" | "loading" | "error">("ready");
   const [routeStart, setRouteStart] = useState(stationNodeId("bts-sukhumvit", "อโศก"));
   const [routeEnd, setRouteEnd] = useState(stationNodeId("arl", "สุวรรณภูมิ"));
   const [routePreference, setRoutePreference] = useState<RoutePreference>("fastest");
@@ -541,6 +575,7 @@ export default function Home() {
   const [alertStatus, setAlertStatus] = useState<"loading" | "ready" | "error">("loading");
 
   const line = railLines.find((item) => item.id === lineId) ?? railLines[0];
+  const mapLine = railLines.find((item) => item.id === mapLineId) ?? railLines[0];
   const stationIndex = Math.max(0, line.stations.indexOf(station));
   const favoriteKey = `${line.id}|${station}`;
   const isFavorite = favorites.includes(favoriteKey);
@@ -595,6 +630,48 @@ export default function Home() {
     localStorage.setItem("bangkok-rail-selection", JSON.stringify({ lineId, station }));
   }, [lineId, station, ready]);
 
+  useEffect(() => {
+    if (activeView !== "map" || mapMode !== "nearby") return;
+    const key = `${mapLineId}|${mapStation}`;
+    const known = knownStationLocations[key];
+    if (known) {
+      setMapLocation(known);
+      setMapLocationStatus("ready");
+      return;
+    }
+
+    const cacheKey = `bangkok-rail-map-location:${key}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        setMapLocation(JSON.parse(cached));
+        setMapLocationStatus("ready");
+        return;
+      } catch {}
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setMapLocationStatus("loading");
+    const query = encodeURIComponent(`สถานี${mapStation} ${mapLine.name} ประเทศไทย`);
+    fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=th&q=${query}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("location lookup failed");
+        return response.json() as Promise<Array<{ lat: string; lon: string; display_name: string }>>;
+      })
+      .then((results) => {
+        if (!active || !results[0]) throw new Error("location not found");
+        const nextLocation = { lat: Number(results[0].lat), lon: Number(results[0].lon), label: results[0].display_name };
+        setMapLocation(nextLocation);
+        setMapLocationStatus("ready");
+        localStorage.setItem(cacheKey, JSON.stringify(nextLocation));
+      })
+      .catch((error) => {
+        if (active && error?.name !== "AbortError") setMapLocationStatus("error");
+      });
+    return () => { active = false; controller.abort(); };
+  }, [activeView, mapLine, mapLineId, mapMode, mapStation]);
+
   const filteredStations = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return normalized ? line.stations.filter((item) => item.toLowerCase().includes(normalized)) : line.stations;
@@ -620,6 +697,9 @@ export default function Home() {
     .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime())[0];
   const operatorSource = operatorSources[line.id];
   const routePlan = useMemo(() => planRoute(routeStart, routeEnd, routePreference), [routeStart, routeEnd, routePreference]);
+  const mapDelta = 0.012;
+  const mapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapLocation.lon - mapDelta}%2C${mapLocation.lat - mapDelta}%2C${mapLocation.lon + mapDelta}%2C${mapLocation.lat + mapDelta}&layer=mapnik&marker=${mapLocation.lat}%2C${mapLocation.lon}`;
+  const mapSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`สถานี${mapStation} ${mapLine.name}`)}`;
 
   function selectLine(nextLine: RailLine) {
     setLineId(nextLine.id);
@@ -632,6 +712,18 @@ export default function Home() {
     localStorage.setItem(`bangkok-rail-station-${line.id}`, nextStation);
     setPickerOpen(false);
     setQuery("");
+  }
+
+  function selectMapLine(nextLineId: string) {
+    const nextLine = railLines.find((item) => item.id === nextLineId) ?? railLines[0];
+    setMapLineId(nextLine.id);
+    setMapStation(nextLine.stations[Math.floor(nextLine.stations.length / 2)]);
+  }
+
+  function showMapStation(nextLineId: string, nextStation: string) {
+    setMapLineId(nextLineId);
+    setMapStation(nextStation);
+    setMapMode("nearby");
   }
 
   function toggleFavorite() {
@@ -744,40 +836,73 @@ export default function Home() {
           <section className="rail-map-page" aria-label="แผนที่รถไฟฟ้ากรุงเทพมหานคร">
             <div className="map-heading">
               <div>
-                <p className="eyebrow dark">BANGKOK RAIL NETWORK</p>
-                <h2>ดูทุกสายบนแผนที่เดียว</h2>
-                <span>ใช้นิ้วเลื่อนแผนที่ และกดปุ่มเพื่อซูมดูชื่อสถานี</span>
+                <p className="eyebrow dark">BANGKOK RAIL MAP</p>
+                <h2>{mapMode === "nearby" ? "รอบสถานีมีอะไรบ้าง?" : "ดูทุกสายบนแผนที่เดียว"}</h2>
+                <span>{mapMode === "nearby" ? "เลือกสถานี แล้วเลื่อนหรือซูมสำรวจสถานที่ใกล้เคียง" : "ใช้นิ้วเลื่อนแผนที่ และกดปุ่มเพื่อซูมดูชื่อสถานี"}</span>
               </div>
-              <div className="map-controls" aria-label="ควบคุมการซูมแผนที่">
+              {mapMode === "network" && <div className="map-controls" aria-label="ควบคุมการซูมแผนที่">
                 <button onClick={() => setMapZoom((value) => Math.max(1, value - 0.25))} disabled={mapZoom <= 1} aria-label="ย่อแผนที่">−</button>
                 <button onClick={() => setMapZoom(1)} aria-label="คืนขนาดแผนที่">{Math.round(mapZoom * 100)}%</button>
                 <button onClick={() => setMapZoom((value) => Math.min(3, value + 0.25))} disabled={mapZoom >= 3} aria-label="ขยายแผนที่">＋</button>
+              </div>}
+            </div>
+
+            <div className="map-view-switch" role="tablist" aria-label="ประเภทแผนที่">
+              <button className={mapMode === "nearby" ? "active" : ""} onClick={() => setMapMode("nearby")} role="tab" aria-selected={mapMode === "nearby"}>⌖ สถานที่รอบสถานี</button>
+              <button className={mapMode === "network" ? "active" : ""} onClick={() => setMapMode("network")} role="tab" aria-selected={mapMode === "network"}>▦ ผังเส้นทางทุกสาย</button>
+            </div>
+
+            {mapMode === "nearby" ? <>
+              <div className="map-station-fields">
+                <label><span>สายรถไฟฟ้า</span><select value={mapLineId} onChange={(event) => selectMapLine(event.target.value)}>{railLines.map((item) => <option key={item.id} value={item.id}>{item.short} · {item.name}</option>)}</select></label>
+                <label><span>สถานี</span><select value={mapStation} onChange={(event) => setMapStation(event.target.value)}>{mapLine.stations.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
               </div>
-            </div>
 
-            <div className="rail-map-viewport" role="region" aria-label="แผนที่ซูมและเลื่อนได้" tabIndex={0}>
-              <img
-                src="./bangkok-rail-map.webp"
-                alt="แผนที่เส้นทางรถไฟฟ้ากรุงเทพมหานครและปริมณฑล"
-                style={{ width: `${mapZoom * 100}%` }}
-                draggable={false}
-              />
-            </div>
+              <div className="popular-map-stations" aria-label="สถานียอดนิยม">
+                {popularMapStations.map(([popularLineId, popularStation]) => <button key={`${popularLineId}-${popularStation}`} className={mapLineId === popularLineId && mapStation === popularStation ? "active" : ""} onClick={() => showMapStation(popularLineId, popularStation)}>{popularStation}</button>)}
+              </div>
 
-            <div className="map-line-legend" aria-label="สายรถไฟฟ้าที่รองรับในเว็บ">
-              {railLines.map((mapLine) => (
-                <button key={mapLine.id} onClick={() => { selectLine(mapLine); setActiveView("trains"); }}>
-                  <i style={{ background: mapLine.color }} />
-                  <span><strong>{mapLine.short}</strong>{mapLine.name.replace("MRT ", "")}</span>
-                </button>
-              ))}
-            </div>
+              <div className="interactive-map-card">
+                <div className="map-location-title">
+                  <span className="map-station-pin" style={{ background: mapLine.color }}>{mapLine.short}</span>
+                  <div><small>กำลังสำรวจรอบ</small><strong>สถานี{mapStation}</strong><span>{mapLocationStatus === "loading" ? "กำลังค้นหาตำแหน่ง…" : mapLocationStatus === "error" ? "ค้นหาพิกัดบนแผนที่ไม่สำเร็จ" : mapLocation.label}</span></div>
+                </div>
+                {mapLocationStatus === "error" ? (
+                  <div className="map-location-error"><strong>ยังแสดงแผนที่ย่อไม่ได้</strong><span>กดเปิดแผนที่เต็มเพื่อค้นหาสถานีนี้โดยตรง</span><a href={mapSearchUrl} target="_blank" rel="noreferrer">เปิดใน Google Maps ↗</a></div>
+                ) : (
+                  <iframe key={`${mapLineId}-${mapStation}-${mapLocation.lat}`} src={mapEmbedUrl} title={`แผนที่สถานที่รอบสถานี${mapStation}`} loading="lazy" referrerPolicy="no-referrer" />
+                )}
+              </div>
 
-            <div className="map-actions">
-              <button className="map-plan-button" onClick={() => setActiveView("planner")}>⇄ วางแผนเส้นทางจากแผนที่</button>
-              <a href="https://www.bts.co.th/btsroutes/btsroutes.pdf" target="_blank" rel="noreferrer">เปิดแผนที่ต้นฉบับจาก BTS ↗</a>
-            </div>
-            <p className="map-source-note">แผนที่อ้างอิงไฟล์เส้นทางจาก BTS SkyTrain และใช้เพื่อช่วยดูภาพรวมการเชื่อมต่อ โปรดตรวจประกาศผู้ให้บริการก่อนเดินทาง</p>
+              <div className="nearby-category-grid" aria-label="ค้นหาสถานที่ใกล้สถานี">
+                {nearbyCategories.map(([icon, category]) => <a key={category} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${category} ใกล้สถานี${mapStation} ${mapLine.name}`)}`} target="_blank" rel="noreferrer"><b>{icon}</b><span>{category}</span><small>ค้นหารอบสถานี ↗</small></a>)}
+              </div>
+
+              <div className="map-actions">
+                <a className="map-primary-link" href={mapSearchUrl} target="_blank" rel="noreferrer">เปิดแผนที่เต็มและนำทาง ↗</a>
+                <button onClick={() => { setLineId(mapLine.id); setStation(mapStation); setActiveView("trains"); }}>ดูขบวนที่สถานีนี้</button>
+              </div>
+              <p className="map-source-note">แผนที่และชื่อสถานที่อ้างอิง OpenStreetMap ส่วนปุ่มค้นหาสถานที่และนำทางจะเปิด Google Maps ข้อมูลร้านและทางเข้าออกอาจเปลี่ยนแปลง ควรตรวจสอบอีกครั้งก่อนเดินทาง</p>
+            </> : <>
+              <div className="rail-map-viewport" role="region" aria-label="แผนที่ซูมและเลื่อนได้" tabIndex={0}>
+                <img src="./bangkok-rail-map.webp" alt="แผนที่เส้นทางรถไฟฟ้ากรุงเทพมหานครและปริมณฑล" style={{ width: `${mapZoom * 100}%` }} draggable={false} />
+              </div>
+
+              <div className="map-line-legend" aria-label="สายรถไฟฟ้าที่รองรับในเว็บ">
+                {railLines.map((legendLine) => (
+                  <button key={legendLine.id} onClick={() => { selectLine(legendLine); setActiveView("trains"); }}>
+                    <i style={{ background: legendLine.color }} />
+                    <span><strong>{legendLine.short}</strong>{legendLine.name.replace("MRT ", "")}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="map-actions">
+                <button className="map-plan-button" onClick={() => setActiveView("planner")}>⇄ วางแผนเส้นทางจากแผนที่</button>
+                <a href="https://www.bts.co.th/btsroutes/btsroutes.pdf" target="_blank" rel="noreferrer">เปิดแผนที่ต้นฉบับจาก BTS ↗</a>
+              </div>
+              <p className="map-source-note">แผนที่อ้างอิงไฟล์เส้นทางจาก BTS SkyTrain และใช้เพื่อช่วยดูภาพรวมการเชื่อมต่อ โปรดตรวจประกาศผู้ให้บริการก่อนเดินทาง</p>
+            </>}
           </section>
         )}
 
