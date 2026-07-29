@@ -41,6 +41,20 @@ function linesFor(text, fallback) {
   return [];
 }
 
+function cleanPostText(value) {
+  return value
+    .replace(/All reactions:[\\s\\S]*$/i, "")
+    .replace(/(?:Like|Comment|Share|See more from)[\\s\\S]*$/i, "")
+    .replace(/(?:Email or phone number|Password|Log In|Forgot)[\\s\\S]*$/i, "")
+    .replace(/\\s+/g, " ")
+    .trim();
+}
+
+function postSummary(text) {
+  const start = Math.max(0, text.search(incident) - 70);
+  return cleanPostText(text.slice(start, start + 330));
+}
+
 function area(text) {
   const match = text.match(/(?:ตั้งแต่|ระหว่าง)\s*(?:สถานี)?\s*([^,.;]{2,35}?)\s*(?:ถึง|–|-)\s*(?:สถานี)?\s*([^,.;]{2,35}?)(?:\s|$)/);
   return match ? match[1].trim() + "–" + match[2].trim() : "โปรดตรวจรายละเอียดในประกาศ";
@@ -87,7 +101,7 @@ for (const source of sources) {
     }
     if (!incident.test(text) || !postUrl) continue;
     const start = Math.max(0, text.search(incident) - 80);
-    const summary = text.slice(start, start + 280);
+    const summary = postSummary(text);
     const minutes = frequency(summary);
     for (const lineId of affectedLines) {
       if (candidates.has(lineId)) continue;
