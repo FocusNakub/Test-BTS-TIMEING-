@@ -1,8 +1,9 @@
-name: Sync rail service alerts
+name: Cloud rail monitor and publish
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # Asia/Bangkok: hourly from 06:00–00:00; the script also enforces the 00:30–05:00 pause.
+    - cron: "0 23,0-17 * * *"
   workflow_dispatch:
 
 permissions:
@@ -15,9 +16,22 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install monitor browser
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Check rail disruption announcements
+        env:
+          ALERT_UPDATE_URL: https://bangkok-rail-daily-2026.pp5074160.chatgpt.site/api/service-alerts/update
+          ALERT_UPDATE_TOKEN: ${{ secrets.ALERT_UPDATE_TOKEN }}
+          SITES_BYPASS_TOKEN: ${{ secrets.SITES_BYPASS_TOKEN }}
+        run: node scripts/cloud-monitor.mjs
       - name: Fetch live alert status
         env:
           SITES_BYPASS_TOKEN: ${{ secrets.SITES_BYPASS_TOKEN }}
