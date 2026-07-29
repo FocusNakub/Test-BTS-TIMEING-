@@ -6,13 +6,15 @@ const bypassToken = process.env.SITES_BYPASS_TOKEN;
 if (!endpoint || !updateToken || !bypassToken) throw new Error("Missing GitHub Actions secrets");
 
 const sources = [
-  { name: "ข่าวนวัตกรรมขนส่งเดลินิวส์", url: "https://www.facebook.com/TransportDailynews", lineIds: [] },
-  { name: "BTS SkyTrain", url: "https://www.facebook.com/BTSSkyTrain", lineIds: ["bts-sukhumvit", "bts-silom", "gold"] },
-  { name: "BEM MRT", url: "https://www.facebook.com/BEM.MRT", lineIds: ["mrt-blue", "mrt-purple"] },
-  { name: "MRT Pink Line", url: "https://www.facebook.com/MRTPinkLine", lineIds: ["mrt-pink"] },
-  { name: "MRT Yellow Line", url: "https://www.facebook.com/MRTYellowLine", lineIds: ["mrt-yellow"] },
-  { name: "รถไฟฟ้าสายสีแดง", url: "https://www.facebook.com/REDLineSRTET", lineIds: ["red-dark", "red-light"] },
-  { name: "Airport Rail Link", url: "https://www.facebook.com/AirportRailLink", lineIds: ["arl"] }
+  // Dailynews is checked first to discover incidents. An operator post always
+  // replaces its wording when both sources report the same line.
+  { name: "ข่าวนวัตกรรมขนส่งเดลินิวส์", url: "https://www.facebook.com/TransportDailynews", lineIds: [], priority: 1, operator: false },
+  { name: "BTS SkyTrain", url: "https://www.facebook.com/BTSSkyTrain", lineIds: ["bts-sukhumvit", "bts-silom", "gold"], priority: 2, operator: true },
+  { name: "BEM MRT", url: "https://www.facebook.com/BEM.MRT", lineIds: ["mrt-blue", "mrt-purple"], priority: 2, operator: true },
+  { name: "MRT Pink Line", url: "https://www.facebook.com/MRTPinkLine", lineIds: ["mrt-pink"], priority: 2, operator: true },
+  { name: "MRT Yellow Line", url: "https://www.facebook.com/MRTYellowLine", lineIds: ["mrt-yellow"], priority: 2, operator: true },
+  { name: "รถไฟฟ้าสายสีแดง", url: "https://www.facebook.com/REDLineSRTET", lineIds: ["red-dark", "red-light"], priority: 2, operator: true },
+  { name: "Airport Rail Link", url: "https://www.facebook.com/AirportRailLink", lineIds: ["arl"], priority: 2, operator: true }
 ];
 
 const crowdSources = [
@@ -90,6 +92,28 @@ function cleanPostText(value) {
     .trim();
 }
 
+function operatorAnnouncement(value, sourceName) {
+  const escapedName = sourceName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const cleaned = cleanPostText(value)
+    .replace(new RegExp("^" + escapedName + "(?:\\s+\\d+\\s*[hm]|\\s+เมื่อ\\S+)?\\s*[·•]?\\s*", "i"), "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return "";
+  return cleaned.length > 280 ? cleaned.slice(0, 277).trimEnd() + "…" : cleaned;
+}
+
+async function latestPost(page) {
+  const article = page.locator('[role="article"]').first();
+  const root = await article.count() ? article : page.locator("body");
+  const text = (await root.innerText()).replace(/\s+/g, " ").trim();
+  const postUrl = await root.locator('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="]').evaluateAll((links) => {
+    const href = links.map((link) => link.href).find(Boolean);
+    return href ? href.split("?")[0] : "";
+  });
+  return { text, postUrl };
+}
+
 const lineNames = {
   "bts-sukhumvit": "BTS สายสุขุมวิท",
   "bts-silom": "BTS สายสีลม",
@@ -153,11 +177,7 @@ for (const source of sources) {
   try {
     await page.goto(source.url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(2500);
-    const text = (await page.locator("body").innerText()).replace(/\s+/g, " ").trim();
-    const postUrl = await page.locator('a[href*="/posts/"]').evaluateAll((links) => {
-      const href = links.map((link) => link.href).find((value) => value.includes("/posts/"));
-      return href ? href.split("?")[0] : "";
-    });
+    const { text, postUrl } = await latestPost(page);
     const affectedLines = linesFor(text, source.lineIds);
     if (!affectedLines.length) continue;
     if (resolved.test(text)) {
@@ -167,13 +187,16 @@ for (const source of sources) {
     if (!incident.test(text) || !postUrl) continue;
     const minutes = frequency(text);
     for (const lineId of affectedLines) {
-      const summary = postSummary(text, lineId);
-      if (candidates.has(lineId)) continue;
+      const summary = source.operator ? operatorAnnouncement(text, source.name) : postSummary(text, lineId);
+      if (!summary) continue;
+      const previousCandidate = candidates.get(lineId);
+      if (previousCandidate && previousCandidate.priority >= source.priority) continue;
       const existing = currentByLine.get(lineId);
       if (existing && existing.sourceUrl === postUrl) continue;
       candidates.set(lineId, {
+        priority: source.priority,
         lineId,
-        affectedArea: area(summary),
+        affectedArea: area(text),
         summary,
         ...(minutes ? { delayMinutes: [minutes, minutes] } : {}),
         updatedAt: new Date().toISOString(),
@@ -231,6 +254,10 @@ const updated = await api({
     Authorization: "Bearer " + updateToken,
     "Content-Type": "application/json"
   },
-  body: JSON.stringify({ alerts: [...candidates.values()], resolvedLineIds: [...resolvedLines], crowdReports: [...crowdCandidates.values()] })
+  body: JSON.stringify({
+    alerts: [...candidates.values()].map(({ priority, ...alert }) => alert),
+    resolvedLineIds: [...resolvedLines],
+    crowdReports: [...crowdCandidates.values()]
+  })
 });
 console.log(JSON.stringify(updated));
