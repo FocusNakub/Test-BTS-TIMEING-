@@ -17,6 +17,7 @@ type RailLine = {
 type RouteNode = { id: string; lineId: string; station: string; stationIndex: number };
 type RouteEdge = { to: string; transfer: boolean };
 type RoutePreference = "fastest" | "cheapest" | "fewest-transfers";
+type ViewMode = "trains" | "planner" | "map";
 type RoutePlan = {
   nodes: RouteNode[];
   stations: number;
@@ -524,7 +525,8 @@ function crowdLabel(value: number) {
 }
 
 export default function Home() {
-  const [plannerOpen, setPlannerOpen] = useState(false);
+  const [activeView, setActiveView] = useState<ViewMode>("trains");
+  const [mapZoom, setMapZoom] = useState(1);
   const [routeStart, setRouteStart] = useState(stationNodeId("bts-sukhumvit", "อโศก"));
   const [routeEnd, setRouteEnd] = useState(stationNodeId("arl", "สุวรรณภูมิ"));
   const [routePreference, setRoutePreference] = useState<RoutePreference>("fastest");
@@ -644,7 +646,7 @@ export default function Home() {
         <header className="topbar">
           <div>
             <p className="eyebrow">BANGKOK RAIL · DAILY</p>
-            <h1>{plannerOpen ? "วางแผนการเดินทาง" : "รถไฟขบวนถัดไป"}</h1>
+            <h1>{activeView === "planner" ? "วางแผนการเดินทาง" : activeView === "map" ? "แผนที่รถไฟฟ้า" : "รถไฟขบวนถัดไป"}</h1>
           </div>
           <div className="clock" aria-label="เวลาปัจจุบัน">
             <strong>{now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</strong>
@@ -668,11 +670,12 @@ export default function Home() {
         </nav>
 
         <div className="mode-switch" role="tablist" aria-label="เลือกหน้าการใช้งาน">
-          <button className={!plannerOpen ? "active" : ""} onClick={() => setPlannerOpen(false)} role="tab" aria-selected={!plannerOpen}>ขบวนถัดไป</button>
-          <button className={plannerOpen ? "active" : ""} onClick={() => setPlannerOpen(true)} role="tab" aria-selected={plannerOpen}>⇄ วางแผนเส้นทาง</button>
+          <button className={activeView === "trains" ? "active" : ""} onClick={() => setActiveView("trains")} role="tab" aria-selected={activeView === "trains"}>ขบวนถัดไป</button>
+          <button className={activeView === "planner" ? "active" : ""} onClick={() => setActiveView("planner")} role="tab" aria-selected={activeView === "planner"}>⇄ วางแผนเส้นทาง</button>
+          <button className={activeView === "map" ? "active" : ""} onClick={() => setActiveView("map")} role="tab" aria-selected={activeView === "map"}>⌖ แผนที่</button>
         </div>
 
-        {plannerOpen && (
+        {activeView === "planner" && (
           <section className="route-planner" aria-label="วางแผนเส้นทางรถไฟฟ้า">
             <div className="planner-heading">
               <p className="eyebrow dark">ROUTE PLANNER</p>
@@ -737,6 +740,48 @@ export default function Home() {
           </section>
         )}
 
+        {activeView === "map" && (
+          <section className="rail-map-page" aria-label="แผนที่รถไฟฟ้ากรุงเทพมหานคร">
+            <div className="map-heading">
+              <div>
+                <p className="eyebrow dark">BANGKOK RAIL NETWORK</p>
+                <h2>ดูทุกสายบนแผนที่เดียว</h2>
+                <span>ใช้นิ้วเลื่อนแผนที่ และกดปุ่มเพื่อซูมดูชื่อสถานี</span>
+              </div>
+              <div className="map-controls" aria-label="ควบคุมการซูมแผนที่">
+                <button onClick={() => setMapZoom((value) => Math.max(1, value - 0.25))} disabled={mapZoom <= 1} aria-label="ย่อแผนที่">−</button>
+                <button onClick={() => setMapZoom(1)} aria-label="คืนขนาดแผนที่">{Math.round(mapZoom * 100)}%</button>
+                <button onClick={() => setMapZoom((value) => Math.min(3, value + 0.25))} disabled={mapZoom >= 3} aria-label="ขยายแผนที่">＋</button>
+              </div>
+            </div>
+
+            <div className="rail-map-viewport" role="region" aria-label="แผนที่ซูมและเลื่อนได้" tabIndex={0}>
+              <img
+                src="./bangkok-rail-map.webp"
+                alt="แผนที่เส้นทางรถไฟฟ้ากรุงเทพมหานครและปริมณฑล"
+                style={{ width: `${mapZoom * 100}%` }}
+                draggable={false}
+              />
+            </div>
+
+            <div className="map-line-legend" aria-label="สายรถไฟฟ้าที่รองรับในเว็บ">
+              {railLines.map((mapLine) => (
+                <button key={mapLine.id} onClick={() => { selectLine(mapLine); setActiveView("trains"); }}>
+                  <i style={{ background: mapLine.color }} />
+                  <span><strong>{mapLine.short}</strong>{mapLine.name.replace("MRT ", "")}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="map-actions">
+              <button className="map-plan-button" onClick={() => setActiveView("planner")}>⇄ วางแผนเส้นทางจากแผนที่</button>
+              <a href="https://www.bts.co.th/btsroutes/btsroutes.pdf" target="_blank" rel="noreferrer">เปิดแผนที่ต้นฉบับจาก BTS ↗</a>
+            </div>
+            <p className="map-source-note">แผนที่อ้างอิงไฟล์เส้นทางจาก BTS SkyTrain และใช้เพื่อช่วยดูภาพรวมการเชื่อมต่อ โปรดตรวจประกาศผู้ให้บริการก่อนเดินทาง</p>
+          </section>
+        )}
+
+        {activeView === "trains" && <>
         <section className="station-hero">
           <div className="status-row">
             <span className="network-badge"><i />{line.short} · {line.name}</span>
@@ -915,6 +960,7 @@ export default function Home() {
           <p>Bangkok Rail Daily · เว็บส่วนตัวสำหรับช่วยวางแผนเดินทาง</p>
           <p>เวลาและความหนาแน่นอาจคลาดเคลื่อน ไม่ใช่ระบบทางการของผู้ให้บริการ</p>
         </footer>
+        </>}
       </div>
 
       {pickerOpen && (
