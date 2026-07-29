@@ -1,5 +1,5 @@
-const CACHE = "bangkok-rail-daily-v5";
-self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["./"]))));
+const CACHE = "bangkok-rail-daily-v6";
+self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["./", "./bangkok-rail-map.webp"]))));
 self.addEventListener("activate", (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))));
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
