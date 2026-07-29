@@ -40,7 +40,7 @@ jobs:
         env:
           NEXT_PUBLIC_ALERT_FEED_URL: /Test-BTS-TIMEING-/service-alerts.json
           NEXT_PUBLIC_ENVIRONMENT_FEED_URL: /Test-BTS-TIMEING-/environment-status.json
-          NEXT_PUBLIC_PUSH_SUBSCRIBE_URL: https://bangkok-rail-daily-2026.pp5074160.chatgpt.site/api/push/subscribe
+          NEXT_PUBLIC_PUSH_SUBSCRIBE_URL: https://bangkokrailpush.pp5074160.workers.dev/subscribe
         run: |
           mkdir "$RUNNER_TEMP/site-server"
           mv app/api lib db "$RUNNER_TEMP/site-server/"
