@@ -45,7 +45,7 @@ jobs:
           jq -e '.alerts | type == "array"' /tmp/service-alerts.json >/dev/null
       - name: Publish changed alerts
         run: |
-          if diff -q <(jq -S '.alerts' /tmp/service-alerts.json) <(jq -S '.alerts' service-alerts.json) >/dev/null; then
+          if diff -q <(jq -S '{alerts, crowdReports}' /tmp/service-alerts.json) <(jq -S '{alerts, crowdReports}' service-alerts.json) >/dev/null; then
             echo "No alert change"
             exit 0
           fi
