@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BTS Live + Car Density Concept</title>
+<style>
+:root{--green:#00843d;--dark:#102a43;--muted:#657786;--bg:#eef3f6;--silom:#0067a0}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Noto Sans Thai",sans-serif;background:var(--bg);color:#16324f}
+header{background:linear-gradient(90deg,#007f3b,#00a651);color:#fff;padding:18px 22px;position:sticky;top:0;z-index:20}
+header h1{margin:0;font-size:25px} header p{margin:5px 0 0;opacity:.9;font-size:13px}
+.wrap{max-width:1220px;margin:auto;padding:18px}
+.tabs{display:flex;gap:10px;margin-bottom:14px}
+.tab{border:0;border-radius:10px;padding:11px 16px;font-weight:800;cursor:pointer;background:#fff;color:#29445d}
+.tab.active{background:var(--green);color:#fff}
+.layout{display:grid;grid-template-columns:1.05fr .95fr;gap:16px}
+.card{background:#fff;border-radius:16px;box-shadow:0 7px 25px rgba(18,45,67,.1);overflow:hidden}
+.card-title{padding:16px 18px;border-bottom:1px solid #e7edf1;font-weight:800}
+.route{padding:15px 18px;max-height:680px;overflow:auto}
+.station{display:grid;grid-template-columns:54px 18px 1fr auto;align-items:center;gap:10px;padding:9px 7px;border-radius:9px;cursor:pointer}
+.station:hover{background:#eef8f1} .station.selected{background:#def4e5}
+.code{font-weight:900;color:#31506b}
+.dot{width:15px;height:15px;border:4px solid var(--green);background:white;border-radius:50%;position:relative}
+.dot:after{content:"";position:absolute;width:4px;height:26px;background:var(--green);top:11px;left:2px}
+.station:last-child .dot:after{display:none}
+.names b{display:block} .names small{color:var(--muted)}
+.arrow{font-size:20px;color:#9aa9b5}
+.detail{padding:18px}
+.station-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.station-code{font-size:40px;font-weight:900;color:var(--green)}
+.station-name h2{margin:0;font-size:27px} .station-name p{margin:4px 0;color:var(--muted)}
+.live-box{margin-top:15px;border:1px solid #dfe7ec;border-radius:13px;padding:14px;background:#f8fbfc}
+.live-title{display:flex;justify-content:space-between;font-weight:800}
+.live-dot{color:#dc3545} .live-dot:before{content:"●";margin-right:5px}
+.direction{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #e5ebef}
+.direction:last-child{border-bottom:0}
+.eta{font-size:28px;font-weight:900;color:#0a7b37}
+.train{margin-top:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.car{border-radius:11px;padding:13px 6px;text-align:center;color:#fff;font-weight:800;position:relative}
+.car:after{content:"";position:absolute;right:-7px;top:50%;width:7px;height:6px;background:#71808b}
+.car:last-child:after{display:none}
+.low{background:#21ad5b} .mid{background:#f2a900} .high{background:#e33d45}
+.car small{display:block;font-size:11px;opacity:.9;margin-top:5px}
+.notice{margin-top:12px;background:#fff4cc;border-radius:10px;padding:10px;font-size:13px}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+button.action{border:0;border-radius:9px;padding:10px 13px;background:#103d67;color:#fff;font-weight:800;cursor:pointer}
+button.secondary{background:#e7eef3;color:#18344c}
+footer{text-align:center;color:#697d8d;font-size:12px;padding:20px}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.route{max-height:440px}}
+</style>
+</head>
+<body>
+<header>
+<h1>BTS LIVE — Train Occupancy Concept</h1>
+<p>เลือกสถานีเพื่อดูรถขบวนถัดไป และความหนาแน่นรายตู้</p>
+</header>
+<div class="wrap">
+<div class="tabs">
+<button class="tab active" data-line="sukhumvit">สายสุขุมวิท</button>
+<button class="tab" data-line="silom">สายสีลม</button>
+</div>
+<div class="layout">
+<section class="card">
+<div class="card-title">เลือกสถานี</div>
+<div class="route" id="route"></div>
+</section>
+<section class="card">
+<div class="card-title">ข้อมูลสถานี</div>
+<div class="detail">
+<div class="station-head">
+<div class="station-code" id="selectedCode">CEN</div>
+<div class="station-name"><h2 id="selectedTh">สยาม</h2><p id="selectedEn">Siam</p></div>
+</div>
+<div class="live-box">
+<div class="live-title"><span>รถไฟขบวนถัดไป</span><span class="live-dot">LIVE</span></div>
+<div class="direction"><div><b id="dir1">ไปคูคต</b><br><small>ชานชาลา 1</small></div><div class="eta" id="eta1">—</div></div>
+<div class="direction"><div><b id="dir2">ไปเคหะฯ</b><br><small>ชานชาลา 2</small></div><div class="eta" id="eta2">—</div></div>
+</div>
+
+<div class="train" id="cars"></div>
+<div class="notice">ความหนาแน่นรายตู้เป็นข้อมูลจำลอง ส่วนเวลารถจริงแสดงผ่านบริการ Live ภายนอกเมื่อกดปุ่มด้านล่าง</div>
+
+<div class="actions">
+<button class="action" id="openLive">เปิดข้อมูลรถจริง</button>
+<button class="action secondary" id="randomCrowd">สุ่มความหนาแน่นใหม่</button>
+</div>
+<div class="notice" style="margin-top:14px">
+ข้อมูลเวลารถจริงจะเปิดในแท็บใหม่ เพราะเว็บไซต์ภายนอกไม่อนุญาตให้ฝังในหน้านี้
+</div>
+</div>
+</section>
+</div>
+</div>
+<footer>ต้นแบบอิสระ ไม่ใช่เว็บไซต์ทางการของ BTS · เวลารถจริงขึ้นอยู่กับบริการภายนอกและการเชื่อมต่ออินเทอร์เน็ต</footer>
+
+<script>
+const data={
+  sukhumvit:[["N24", "คูคต", "Khu Khot"], ["N23", "แยก คปอ.", "Yaek Kor Por Aor"], ["N22", "พิพิธภัณฑ์กองทัพอากาศ", "Royal Thai Air Force Museum"], ["N21", "โรงพยาบาลภูมิพลอดุลยเดช", "Bhumibol Adulyadej Hospital"], ["N20", "สะพานใหม่", "Saphan Mai"], ["N19", "สายหยุด", "Sai Yud"], ["N18", "พหลโยธิน 59", "Phahon Yothin 59"], ["N17", "วัดพระศรีมหาธาตุ", "Wat Phra Sri Mahathat"], ["N16", "กรมทหารราบที่ 11", "11th Infantry Regiment"], ["N15", "บางบัว", "Bang Bua"], ["N14", "กรมป่าไม้", "Royal Forest Department"], ["N13", "มหาวิทยาลัยเกษตรศาสตร์", "Kasetsart University"], ["N12", "เสนานิคม", "Sena Nikhom"], ["N11", "รัชโยธิน", "Ratchayothin"], ["N10", "พหลโยธิน 24", "Phahon Yothin 24"], ["N9", "ห้าแยกลาดพร้าว", "Ha Yaek Lat Phrao"], ["N8", "หมอชิต", "Mo Chit"], ["N7", "สะพานควาย", "Saphan Khwai"], ["N5", "อารีย์", "Ari"], ["N4", "สนามเป้า", "Sanam Pao"], ["N3", "อนุสาวรีย์ชัยสมรภูมิ", "Victory Monument"], ["N2", "พญาไท", "Phaya Thai"], ["N1", "ราชเทวี", "Ratchathewi"], ["CEN", "สยาม", "Siam"], ["E1", "ชิดลม", "Chit Lom"], ["E2", "เพลินจิต", "Phloen Chit"], ["E3", "นานา", "Nana"], ["E4", "อโศก", "Asok"], ["E5", "พร้อมพงษ์", "Phrom Phong"], ["E6", "ทองหล่อ", "Thong Lo"], ["E7", "เอกมัย", "Ekkamai"], ["E8", "พระโขนง", "Phra Khanong"], ["E9", "อ่อนนุช", "On Nut"], ["E10", "บางจาก", "Bang Chak"], ["E11", "ปุณณวิถี", "Punnawithi"], ["E12", "อุดมสุข", "Udom Suk"], ["E13", "บางนา", "Bang Na"], ["E14", "แบริ่ง", "Bearing"], ["E15", "สำโรง", "Samrong"], ["E16", "ปู่เจ้า", "Pu Chao"], ["E17", "ช้างเอราวัณ", "Chang Erawan"], ["E18", "โรงเรียนนายเรือ", "Royal Thai Naval Academy"], ["E19", "ปากน้ำ", "Pak Nam"], ["E20", "ศรีนครินทร์", "Srinagarindra"], ["E21", "แพรกษา", "Phraek Sa"], ["E22", "สายลวด", "Sai Luat"], ["E23", "เคหะฯ", "Kheha"]],
+  silom:[["W1", "สนามกีฬาแห่งชาติ", "National Stadium"], ["CEN", "สยาม", "Siam"], ["S1", "ราชดำริ", "Ratchadamri"], ["S2", "ศาลาแดง", "Sala Daeng"], ["S3", "ช่องนนทรี", "Chong Nonsi"], ["S4", "เซนต์หลุยส์", "Saint Louis"], ["S5", "สุรศักดิ์", "Surasak"], ["S6", "สะพานตากสิน", "Saphan Taksin"], ["S7", "กรุงธนบุรี", "Krung Thon Buri"], ["S8", "วงเวียนใหญ่", "Wongwian Yai"], ["S9", "โพธิ์นิมิตร", "Pho Nimit"], ["S10", "ตลาดพลู", "Talat Phlu"], ["S11", "วุฒากาศ", "Wutthakat"], ["S12", "บางหว้า", "Bang Wa"]]
+};
+let currentLine="sukhumvit";
+let selected={code:"CEN",th:"สยาม",en:"Siam"};
+
+function renderRoute(){
+ const route=document.getElementById("route"); route.innerHTML="";
+ data[currentLine].forEach(([code,th,en])=>{
+  const el=document.createElement("div");
+  el.className="station"+(code===selected.code?" selected":"");
+  el.innerHTML=`<div class="code">${code}</div><div class="dot"></div><div class="names"><b>${th}</b><small>${en}</small></div><div class="arrow">›</div>`;
+  el.onclick=()=>selectStation(code,th,en);
+  route.appendChild(el);
+ });
+}
+
+function selectStation(code,th,en){
+ selected={code,th,en};
+ document.getElementById("selectedCode").textContent=code;
+ document.getElementById("selectedTh").textContent=th;
+ document.getElementById("selectedEn").textContent=en;
+ setDirections();
+ fakePreviewEta();
+ randomCrowd();
+ renderRoute();
+}
+
+function setDirections(){
+ if(currentLine==="sukhumvit"){
+   document.getElementById("dir1").textContent="มุ่งหน้าคูคต";
+   document.getElementById("dir2").textContent="มุ่งหน้าเคหะฯ";
+ } else {
+   document.getElementById("dir1").textContent="มุ่งหน้าสนามกีฬาแห่งชาติ";
+   document.getElementById("dir2").textContent="มุ่งหน้าบางหว้า";
+ }
+}
+
+function fakePreviewEta(){
+ document.getElementById("eta1").textContent="กดดู Live";
+ document.getElementById("eta2").textContent="กดดู Live";
+}
+
+function randomCrowd(){
+ const cars=document.getElementById("cars"); cars.innerHTML="";
+ for(let i=1;i<=4;i++){
+  const v=Math.floor(20+Math.random()*80);
+  const cls=v<50?"low":v<80?"mid":"high";
+  const txt=v<50?"มีพื้นที่":v<80?"ปานกลาง":"แน่น";
+  cars.insertAdjacentHTML("beforeend",`<div class="car ${cls}">ตู้ ${i}<small>${txt} · ${v}%</small></div>`);
+ }
+}
+
+document.querySelectorAll(".tab").forEach(btn=>btn.onclick=()=>{
+ document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+ btn.classList.add("active"); currentLine=btn.dataset.line;
+ const first=data[currentLine][0]; selectStation(first[0],first[1],first[2]);
+});
+
+document.getElementById("randomCrowd").onclick=randomCrowd;
+document.getElementById("openLive").onclick=()=>{
+ const url="https://bkkskytrain.online/?station="+encodeURIComponent(selected.code);
+ window.open(url,"_blank","noopener,noreferrer");
+};
+
+setDirections(); fakePreviewEta(); randomCrowd(); renderRoute();
+</script>
+</body>
+</html>
