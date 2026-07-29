@@ -14,6 +14,16 @@ type RailLine = {
   stations: string[];
 };
 
+type RouteNode = { id: string; lineId: string; station: string; stationIndex: number };
+type RouteEdge = { to: string; transfer: boolean };
+type RoutePlan = {
+  nodes: RouteNode[];
+  stations: number;
+  transfers: number;
+  fare: number;
+  segments: { line: RailLine; from: string; to: string; stations: number }[];
+};
+
 type ServiceAlert = {
   lineId: string;
   affectedArea: string;
@@ -95,6 +105,134 @@ const railLines: RailLine[] = [
     stations: ["พญาไท", "ราชปรารภ", "มักกะสัน", "รามคำแหง", "หัวหมาก", "บ้านทับช้าง", "ลาดกระบัง", "สุวรรณภูมิ"]
   }
 ];
+
+const routeNodes = railLines.flatMap((routeLine) => routeLine.stations.map((routeStation, stationIndex) => ({
+  id: `${routeLine.id}:${stationIndex}`,
+  lineId: routeLine.id,
+  station: routeStation,
+  stationIndex,
+})));
+
+const explicitInterchanges = [
+  [["bts-sukhumvit", "อโศก"], ["mrt-blue", "สุขุมวิท"]],
+  [["bts-sukhumvit", "หมอชิต"], ["mrt-blue", "สวนจตุจักร"]],
+  [["bts-silom", "ศาลาแดง"], ["mrt-blue", "สีลม"]],
+  [["bts-sukhumvit", "ห้าแยกลาดพร้าว"], ["mrt-blue", "พหลโยธิน"]],
+  [["mrt-blue", "เพชรบุรี"], ["arl", "มักกะสัน"]],
+  [["mrt-blue", "บางซื่อ"], ["red-dark", "กรุงเทพอภิวัฒน์"]],
+  [["mrt-blue", "บางซื่อ"], ["red-light", "กรุงเทพอภิวัฒน์"]],
+] as const;
+
+function stationNodeId(lineId: string, stationName: string) {
+  const routeLine = railLines.find((item) => item.id === lineId);
+  const index = routeLine?.stations.indexOf(stationName) ?? -1;
+  return index >= 0 ? `${lineId}:${index}` : "";
+}
+
+function routeGraph() {
+  const graph = new Map<string, RouteEdge[]>();
+  const connect = (from: string, to: string, transfer: boolean) => {
+    if (!from || !to) return;
+    graph.set(from, [...(graph.get(from) ?? []), { to, transfer }]);
+  };
+  railLines.forEach((routeLine) => routeLine.stations.forEach((_, index) => {
+    const current = `${routeLine.id}:${index}`;
+    if (index > 0) connect(current, `${routeLine.id}:${index - 1}`, false);
+    if (index < routeLine.stations.length - 1) connect(current, `${routeLine.id}:${index + 1}`, false);
+  }));
+  const sameName = new Map<string, string[]>();
+  routeNodes.forEach((node) => sameName.set(node.station, [...(sameName.get(node.station) ?? []), node.id]));
+  sameName.forEach((ids) => ids.forEach((from) => ids.forEach((to) => from !== to && connect(from, to, true))));
+  explicitInterchanges.forEach(([a, b]) => {
+    const from = stationNodeId(a[0], a[1]);
+    const to = stationNodeId(b[0], b[1]);
+    connect(from, to, true);
+    connect(to, from, true);
+  });
+  return graph;
+}
+
+const plannerGraph = routeGraph();
+
+function operatorGroup(lineId: string) {
+  if (lineId.startsWith("bts-")) return "bts";
+  if (lineId === "mrt-blue" || lineId === "mrt-purple") return "bem";
+  if (lineId === "mrt-yellow" || lineId === "mrt-pink") return "monorail";
+  if (lineId.startsWith("red-")) return "red";
+  return lineId;
+}
+
+function estimateSegmentFare(group: string, stations: number) {
+  if (group === "bts") return Math.min(65, 17 + Math.max(0, stations - 1) * 3);
+  if (group === "gold") return 16;
+  if (group === "bem") return Math.min(45, 17 + stations * 2);
+  if (group === "monorail") return Math.min(45, 15 + stations * 3);
+  if (group === "red") return Math.min(42, 12 + stations * 4);
+  if (group === "arl") return Math.min(45, 15 + stations * 5);
+  return 0;
+}
+
+function planRoute(startId: string, endId: string): RoutePlan | null {
+  if (startId === endId) return null;
+  const best = new Map<string, number>([[startId, 0]]);
+  const previous = new Map<string, { id: string; transfer: boolean }>();
+  const queue = [{ id: startId, score: 0 }];
+  while (queue.length) {
+    queue.sort((a, b) => a.score - b.score);
+    const current = queue.shift()!;
+    if (current.id === endId) break;
+    if (current.score !== best.get(current.id)) continue;
+    for (const edge of plannerGraph.get(current.id) ?? []) {
+      const score = current.score + (edge.transfer ? 7 : 10);
+      if (score < (best.get(edge.to) ?? Number.POSITIVE_INFINITY)) {
+        best.set(edge.to, score);
+        previous.set(edge.to, { id: current.id, transfer: edge.transfer });
+        queue.push({ id: edge.to, score });
+      }
+    }
+  }
+  if (!previous.has(endId)) return null;
+  const ids = [endId];
+  let cursor = endId;
+  while (cursor !== startId) {
+    cursor = previous.get(cursor)!.id;
+    ids.unshift(cursor);
+  }
+  const nodes = ids.map((id) => routeNodes.find((node) => node.id === id)!).filter(Boolean);
+  const segments: RoutePlan["segments"] = [];
+  let stations = 0;
+  let transfers = 0;
+  nodes.forEach((node, index) => {
+    if (index === 0) return;
+    const prior = nodes[index - 1];
+    if (prior.lineId !== node.lineId) {
+      transfers += 1;
+      return;
+    }
+    stations += 1;
+    const last = segments[segments.length - 1];
+    if (last?.line.id === node.lineId) {
+      last.to = node.station;
+      last.stations += 1;
+    } else {
+      segments.push({ line: railLines.find((item) => item.id === node.lineId)!, from: prior.station, to: node.station, stations: 1 });
+    }
+  });
+  let fare = 0;
+  let activeGroup = "";
+  let groupStations = 0;
+  segments.forEach((segment, index) => {
+    const group = operatorGroup(segment.line.id);
+    if (activeGroup && group !== activeGroup) {
+      fare += estimateSegmentFare(activeGroup, groupStations);
+      groupStations = 0;
+    }
+    activeGroup = group;
+    groupStations += segment.stations;
+    if (index === segments.length - 1) fare += estimateSegmentFare(activeGroup, groupStations);
+  });
+  return { nodes, stations, transfers, fare, segments };
+}
 
 const interchangeStations = new Set(["สยาม", "อโศก", "สุขุมวิท", "หมอชิต", "สวนจตุจักร", "ศาลาแดง", "สีลม", "บางหว้า", "พญาไท", "สำโรง", "วัดพระศรีมหาธาตุ", "เตาปูน", "ท่าพระ", "หลักสี่", "หัวหมาก", "มักกะสัน", "กรุงธนบุรี", "กรุงเทพอภิวัฒน์", "บางซ่อน", "ลาดพร้าว", "ห้าแยกลาดพร้าว", "พหลโยธิน", "ศูนย์ราชการนนทบุรี"]);
 
@@ -351,6 +489,9 @@ function crowdLabel(value: number) {
 }
 
 export default function Home() {
+  const [plannerOpen, setPlannerOpen] = useState(false);
+  const [routeStart, setRouteStart] = useState(stationNodeId("bts-sukhumvit", "อโศก"));
+  const [routeEnd, setRouteEnd] = useState(stationNodeId("arl", "สุวรรณภูมิ"));
   const [lineId, setLineId] = useState("bts-sukhumvit");
   const [station, setStation] = useState("อโศก");
   const [now, setNow] = useState(new Date());
@@ -440,6 +581,7 @@ export default function Home() {
     .filter((report) => Math.abs(line.stations.indexOf(report.station) - stationIndex) <= 7)
     .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime())[0];
   const operatorSource = operatorSources[line.id];
+  const routePlan = useMemo(() => planRoute(routeStart, routeEnd), [routeStart, routeEnd]);
 
   function selectLine(nextLine: RailLine) {
     setLineId(nextLine.id);
@@ -466,7 +608,7 @@ export default function Home() {
         <header className="topbar">
           <div>
             <p className="eyebrow">BANGKOK RAIL · DAILY</p>
-            <h1>รถไฟขบวนถัดไป</h1>
+            <h1>{plannerOpen ? "วางแผนการเดินทาง" : "รถไฟขบวนถัดไป"}</h1>
           </div>
           <div className="clock" aria-label="เวลาปัจจุบัน">
             <strong>{now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</strong>
@@ -488,6 +630,69 @@ export default function Home() {
             </button>
           ))}
         </nav>
+
+        <div className="mode-switch" role="tablist" aria-label="เลือกหน้าการใช้งาน">
+          <button className={!plannerOpen ? "active" : ""} onClick={() => setPlannerOpen(false)} role="tab" aria-selected={!plannerOpen}>ขบวนถัดไป</button>
+          <button className={plannerOpen ? "active" : ""} onClick={() => setPlannerOpen(true)} role="tab" aria-selected={plannerOpen}>⇄ วางแผนเส้นทาง</button>
+        </div>
+
+        {plannerOpen && (
+          <section className="route-planner" aria-label="วางแผนเส้นทางรถไฟฟ้า">
+            <div className="planner-heading">
+              <p className="eyebrow dark">ROUTE PLANNER</p>
+              <h2>ไปไหนดี?</h2>
+              <span>เลือกสถานีและสายให้ตรงกับจุดที่ขึ้นจริง</span>
+            </div>
+            <div className="route-fields">
+              <label>
+                <span>ต้นทาง</span>
+                <select value={routeStart} onChange={(event) => setRouteStart(event.target.value)}>
+                  {railLines.map((routeLine) => (
+                    <optgroup key={routeLine.id} label={`${routeLine.short} · ${routeLine.name}`}>
+                      {routeLine.stations.map((routeStation, index) => <option key={`${routeLine.id}:${index}`} value={`${routeLine.id}:${index}`}>{routeStation}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              <button className="swap-route" onClick={() => { setRouteStart(routeEnd); setRouteEnd(routeStart); }} aria-label="สลับต้นทางและปลายทาง">⇅</button>
+              <label>
+                <span>ปลายทาง</span>
+                <select value={routeEnd} onChange={(event) => setRouteEnd(event.target.value)}>
+                  {railLines.map((routeLine) => (
+                    <optgroup key={routeLine.id} label={`${routeLine.short} · ${routeLine.name}`}>
+                      {routeLine.stations.map((routeStation, index) => <option key={`${routeLine.id}:${index}`} value={`${routeLine.id}:${index}`}>{routeStation}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {routePlan ? (
+              <div className="route-result" aria-live="polite">
+                <div className="route-summary">
+                  <div><small>ค่าโดยสารประมาณ</small><strong>฿{routePlan.fare}</strong></div>
+                  <div><small>จำนวนสถานี</small><strong>{routePlan.stations}</strong></div>
+                  <div><small>เปลี่ยนสาย</small><strong>{routePlan.transfers}</strong></div>
+                </div>
+                <div className="route-steps">
+                  {routePlan.segments.map((segment, index) => (
+                    <article key={`${segment.line.id}-${index}`}>
+                      <i style={{ background: segment.line.color }}>{segment.line.short}</i>
+                      <div>
+                        <small>{segment.line.name} · {segment.stations} สถานี</small>
+                        <strong>{segment.from} → {segment.to}</strong>
+                        {index < routePlan.segments.length - 1 && <span>เปลี่ยนเป็น {routePlan.segments[index + 1].line.name}</span>}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <p className="fare-note">ค่าโดยสารเป็นค่าประมาณสำหรับผู้ใหญ่แบบเที่ยวเดียว อาจต่างจากราคาจริงเมื่อใช้บัตร โปรโมชั่น ค่าแรกเข้า หรือเดินทางข้ามผู้ให้บริการ โปรดตรวจราคาที่เครื่องจำหน่ายบัตรก่อนเดินทาง</p>
+              </div>
+            ) : (
+              <div className="route-empty">กรุณาเลือกต้นทางและปลายทางคนละสถานี</div>
+            )}
+          </section>
+        )}
 
         <section className="station-hero">
           <div className="status-row">
