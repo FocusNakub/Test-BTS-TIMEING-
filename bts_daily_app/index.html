@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#00843d"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="BTS Daily">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png">
+<title>BTS Daily</title>
+<style>
+:root{--g:#00843d;--gd:#00652e;--bg:#f2f6f4;--text:#15342a;--muted:#65776f}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:Arial,"Noto Sans Thai",sans-serif;color:var(--text)}
+header{background:linear-gradient(135deg,var(--gd),#00a651);color:#fff;padding:calc(18px + env(safe-area-inset-top)) 18px 18px}
+header h1{margin:0;font-size:27px} header p{margin:5px 0 0;opacity:.88}
+main{max-width:720px;margin:auto;padding:14px}
+.card{background:#fff;border-radius:17px;padding:16px;margin-bottom:13px;box-shadow:0 5px 18px #16462d14}
+label{display:block;font-weight:800;margin-bottom:8px} select{width:100%;font-size:17px;padding:13px;border:1px solid #d7e1dc;border-radius:11px;background:white}
+.station{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.code{font-size:42px;font-weight:900;color:var(--g)} h2{margin:0;font-size:25px} .en{color:var(--muted);margin-top:3px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}
+a.btn,button.btn{border:0;text-decoration:none;text-align:center;padding:12px 8px;border-radius:11px;font-weight:800;font-size:14px;cursor:pointer}
+.primary{background:var(--g);color:#fff} .soft{background:#e6f4eb;color:#075f2d}
+.title{font-weight:900;font-size:18px;margin-bottom:4px} .sub{font-size:12px;color:var(--muted);margin-bottom:12px}
+.train{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.car{color:#fff;border-radius:10px;padding:12px 4px;text-align:center;font-weight:900} .car small{display:block;font-size:10px;margin-top:4px}
+.low{background:#22ad5b} .mid{background:#efa900} .high{background:#dc3e48}
+.notice{font-size:12px;background:#fff4cb;padding:10px;border-radius:10px;margin-top:11px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px} .info{background:#f4f8f6;border-radius:11px;padding:12px} .info b{display:block;font-size:20px}
+.install{display:none;width:100%;margin-top:10px}
+footer{text-align:center;color:#718078;font-size:11px;padding:8px 15px 24px}
+@media(max-width:420px){.actions,.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>BTS Daily</h1><p>หน้าเดียวสำหรับใช้ก่อนขึ้นรถทุกวัน</p></header>
+<main>
+<section class="card">
+<label for="stationSelect">สถานีประจำ</label>
+<select id="stationSelect"></select>
+<div class="station" style="margin-top:15px"><div><h2 id="th"></h2><div class="en" id="en"></div></div><div class="code" id="code"></div></div>
+<div class="actions">
+<a class="btn primary" href="https://www.bts.co.th/routemap.html" target="_blank" rel="noopener">เวลา/ค่าโดยสารทางการ</a>
+<a class="btn soft" href="https://www.bts.co.th/traintime-frequency/" target="_blank" rel="noopener">ความถี่และรถเที่ยวสุดท้าย</a>
+</div>
+<button class="btn primary install" id="installBtn">ติดตั้งไว้หน้าโฮม</button>
+</section>
+
+<section class="card">
+<div class="title">ความหนาแน่นที่คาดการณ์</div>
+<div class="sub" id="estimateTime"></div>
+<div class="train" id="cars"></div>
+<div class="notice">ส่วนนี้เป็น “ค่าคาดการณ์” จากวัน เวลา และลักษณะสถานี ไม่ใช่ข้อมูลสดจาก BTS รายตู้</div>
+</section>
+
+<section class="card">
+<div class="title">ข้อมูลเดินทางตอนนี้</div>
+<div class="grid">
+<div class="info"><span>ช่วงเวลา</span><b id="period"></b></div>
+<div class="info"><span>ความถี่โดยประมาณ</span><b id="frequency"></b></div>
+</div>
+</section>
+</main>
+<footer>ไม่ใช่แอปทางการของ BTS · ใช้ลิงก์ทางการสำหรับเวลาเดินรถและค่าโดยสาร</footer>
+<script>
+const stations=[["N24", "คูคต", "Khu Khot"], ["N23", "แยก คปอ.", "Yaek Kor Por Aor"], ["N22", "พิพิธภัณฑ์กองทัพอากาศ", "Royal Thai Air Force Museum"], ["N21", "โรงพยาบาลภูมิพลอดุลยเดช", "Bhumibol Adulyadej Hospital"], ["N20", "สะพานใหม่", "Saphan Mai"], ["N19", "สายหยุด", "Sai Yud"], ["N18", "พหลโยธิน 59", "Phahon Yothin 59"], ["N17", "วัดพระศรีมหาธาตุ", "Wat Phra Sri Mahathat"], ["N16", "กรมทหารราบที่ 11", "11th Infantry Regiment"], ["N15", "บางบัว", "Bang Bua"], ["N14", "กรมป่าไม้", "Royal Forest Department"], ["N13", "มหาวิทยาลัยเกษตรศาสตร์", "Kasetsart University"], ["N12", "เสนานิคม", "Sena Nikhom"], ["N11", "รัชโยธิน", "Ratchayothin"], ["N10", "พหลโยธิน 24", "Phahon Yothin 24"], ["N9", "ห้าแยกลาดพร้าว", "Ha Yaek Lat Phrao"], ["N8", "หมอชิต", "Mo Chit"], ["N7", "สะพานควาย", "Saphan Khwai"], ["N5", "อารีย์", "Ari"], ["N4", "สนามเป้า", "Sanam Pao"], ["N3", "อนุสาวรีย์ชัยสมรภูมิ", "Victory Monument"], ["N2", "พญาไท", "Phaya Thai"], ["N1", "ราชเทวี", "Ratchathewi"], ["CEN", "สยาม", "Siam"], ["E1", "ชิดลม", "Chit Lom"], ["E2", "เพลินจิต", "Phloen Chit"], ["E3", "นานา", "Nana"], ["E4", "อโศก", "Asok"], ["E5", "พร้อมพงษ์", "Phrom Phong"], ["E6", "ทองหล่อ", "Thong Lo"], ["E7", "เอกมัย", "Ekkamai"], ["E8", "พระโขนง", "Phra Khanong"], ["E9", "อ่อนนุช", "On Nut"], ["E10", "บางจาก", "Bang Chak"], ["E11", "ปุณณวิถี", "Punnawithi"], ["E12", "อุดมสุข", "Udom Suk"], ["E13", "บางนา", "Bang Na"], ["E14", "แบริ่ง", "Bearing"], ["E15", "สำโรง", "Samrong"], ["E16", "ปู่เจ้า", "Pu Chao"], ["E17", "ช้างเอราวัณ", "Chang Erawan"], ["E18", "โรงเรียนนายเรือ", "Royal Thai Naval Academy"], ["E19", "ปากน้ำ", "Pak Nam"], ["E20", "ศรีนครินทร์", "Srinagarindra"], ["E21", "แพรกษา", "Phraek Sa"], ["E22", "สายลวด", "Sai Luat"], ["E23", "เคหะฯ", "Kheha"], ["W1", "สนามกีฬาแห่งชาติ", "National Stadium"], ["S1", "ราชดำริ", "Ratchadamri"], ["S2", "ศาลาแดง", "Sala Daeng"], ["S3", "ช่องนนทรี", "Chong Nonsi"], ["S4", "เซนต์หลุยส์", "Saint Louis"], ["S5", "สุรศักดิ์", "Surasak"], ["S6", "สะพานตากสิน", "Saphan Taksin"], ["S7", "กรุงธนบุรี", "Krung Thon Buri"], ["S8", "วงเวียนใหญ่", "Wongwian Yai"], ["S9", "โพธิ์นิมิตร", "Pho Nimit"], ["S10", "ตลาดพลู", "Talat Phlu"], ["S11", "วุฒากาศ", "Wutthakat"], ["S12", "บางหว้า", "Bang Wa"]];
+const sel=document.getElementById("stationSelect");
+stations.forEach(s=>{const o=document.createElement("option");o.value=s[0];o.textContent=`${s[0]} · ${s[1]}`;sel.appendChild(o)});
+const saved=localStorage.getItem("btsStation")||"CEN"; sel.value=saved;
+
+function stationFactor(code){
+ const busy=["CEN","N8","N3","N2","E4","E5","S2","S3","S6","S7"];
+ return busy.includes(code)?15:0;
+}
+function baseLoad(){
+ const d=new Date(), h=d.getHours()+d.getMinutes()/60, weekday=d.getDay()>0&&d.getDay()<6;
+ let base=28, period="นอกเวลาเร่งด่วน", freq="ประมาณ 6–8 นาที";
+ if(weekday && h>=6.5&&h<9.5){base=72;period="เร่งด่วนช่วงเช้า";freq="ประมาณ 3–5 นาที"}
+ else if(weekday && h>=16.5&&h<20){base=78;period="เร่งด่วนช่วงเย็น";freq="ประมาณ 3–5 นาที"}
+ else if(h>=22||h<6){base=20;period="ช่วงดึก/ก่อนเปิดบริการ";freq="ตรวจสอบเวลาทางการ"}
+ else if(!weekday && h>=11&&h<20){base=48;period="วันหยุดช่วงกลางวัน";freq="ประมาณ 5–8 นาที"}
+ return {base,period,freq};
+}
+function render(){
+ const s=stations.find(x=>x[0]===sel.value)||stations[0];
+ localStorage.setItem("btsStation",s[0]);
+ code.textContent=s[0]; th.textContent=s[1]; en.textContent=s[2];
+ const now=baseLoad(); period.textContent=now.period; frequency.textContent=now.freq;
+ estimateTime.textContent="อัปเดตการคาดการณ์ "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});
+ cars.innerHTML="";
+ const patterns=[-18,-5,8,-12];
+ patterns.forEach((p,i)=>{
+   let v=Math.max(10,Math.min(98,now.base+stationFactor(s[0])+p));
+   let cls=v<50?"low":v<80?"mid":"high", txt=v<50?"มีพื้นที่":v<80?"ปานกลาง":"แน่น";
+   cars.insertAdjacentHTML("beforeend",`<div class="car ${cls}">ตู้ ${i+1}<small>${txt} · ~${v}%</small></div>`);
+ });
+}
+sel.addEventListener("change",render); render(); setInterval(render,60000);
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+let deferredPrompt; const installBtn=document.getElementById("installBtn");
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;installBtn.style.display="block"});
+installBtn.onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.style.display="none"}};
+</script>
+</body></html>
