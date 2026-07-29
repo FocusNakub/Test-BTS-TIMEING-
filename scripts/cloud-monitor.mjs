@@ -49,9 +49,32 @@ function cleanPostText(value) {
     .trim();
 }
 
-function postSummary(text) {
-  const start = Math.max(0, text.search(incident) - 70);
-  return cleanPostText(text.slice(start, start + 330));
+const lineNames = {
+  "bts-sukhumvit": "BTS สายสุขุมวิท",
+  "bts-silom": "BTS สายสีลม",
+  gold: "รถไฟฟ้าสายสีทอง",
+  "mrt-blue": "MRT สายสีน้ำเงิน",
+  "mrt-purple": "MRT สายสีม่วง",
+  "mrt-yellow": "MRT สายสีเหลือง",
+  "mrt-pink": "MRT สายสีชมพู",
+  "red-dark": "รถไฟฟ้าสายสีแดงเข้ม",
+  "red-light": "รถไฟฟ้าสายสีแดงอ่อน",
+  arl: "Airport Rail Link"
+};
+
+function postSummary(text, lineId) {
+  const name = lineNames[lineId] || "รถไฟฟ้า";
+  const minutes = frequency(text);
+  if (/งดให้บริการ|หยุดเดินรถ|ปิดสถานี/i.test(text)) {
+    return name + " งดหรือหยุดให้บริการชั่วคราว โปรดตรวจสอบประกาศล่าสุด";
+  }
+  if (/ล่าช้า/i.test(text)) {
+    return name + " มีการเดินรถล่าช้า โปรดเผื่อเวลาเดินทาง";
+  }
+  if (minutes) {
+    return name + " มีเหตุขัดข้อง ขณะนี้ให้บริการด้วยความถี่ประมาณ " + minutes + " นาที";
+  }
+  return name + " มีเหตุขัดข้อง โปรดตรวจสอบประกาศล่าสุด";
 }
 
 function area(text) {
@@ -99,10 +122,9 @@ for (const source of sources) {
       continue;
     }
     if (!incident.test(text) || !postUrl) continue;
-    const start = Math.max(0, text.search(incident) - 80);
-    const summary = postSummary(text);
-    const minutes = frequency(summary);
+    const minutes = frequency(text);
     for (const lineId of affectedLines) {
+      const summary = postSummary(text, lineId);
       if (candidates.has(lineId)) continue;
       const existing = currentByLine.get(lineId);
       if (existing && existing.sourceUrl === postUrl) continue;
