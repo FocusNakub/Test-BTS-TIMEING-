@@ -15,6 +15,47 @@ const sources = [
   { name: "Airport Rail Link", url: "https://www.facebook.com/AirportRailLink", lineIds: ["arl"] }
 ];
 
+const crowdSources = [
+  { name: "กลุ่มผู้ใช้รถไฟฟ้า", url: "https://www.facebook.com/share/g/1BaR6LaXwq/?mibextid=wwXIfr" }
+];
+const crowdWords = /(คนแน่นมาก|คนแน่น|คนเยอะมาก|คนเยอะ|ต่อคิวยาว|ล้นสถานี|เต็มชานชาลา|ขึ้นรถไม่ได้|เบียดมาก)/i;
+const stationLineHints = {
+  "ห้าแยกลาดพร้าว": "bts-sukhumvit", "วัดพระศรีมหาธาตุ": "bts-sukhumvit",
+  "อนุสาวรีย์ชัยสมรภูมิ": "bts-sukhumvit", "มหาวิทยาลัยเกษตรศาสตร์": "bts-sukhumvit",
+  "สนามกีฬาแห่งชาติ": "bts-silom", "สะพานตากสิน": "bts-silom",
+  "ศูนย์ราชการนนทบุรี": "mrt-purple", "คลองบางไผ่": "mrt-purple",
+  "ศูนย์วัฒนธรรม": "mrt-blue", "สวนจตุจักร": "mrt-blue",
+  "หลักสอง": "mrt-blue", "เตาปูน": "mrt-blue", "หัวลำโพง": "mrt-blue",
+  "เมืองทองธานี": "mrt-pink", "แยกปากเกร็ด": "mrt-pink", "มีนบุรี": "mrt-pink",
+  "แยกลำสาลี": "mrt-yellow", "บางกะปิ": "mrt-yellow",
+  "กรุงเทพอภิวัฒน์": "red-dark", "ดอนเมือง": "red-dark", "รังสิต": "red-dark",
+  "ตลิ่งชัน": "red-light", "ราชปรารภ": "arl", "มักกะสัน": "arl",
+  "สุวรรณภูมิ": "arl", "เจริญนคร": "gold", "คลองสาน": "gold",
+  "คูคต": "bts-sukhumvit", "หมอชิต": "bts-sukhumvit", "อารีย์": "bts-sukhumvit",
+  "พญาไท": "bts-sukhumvit", "ราชเทวี": "bts-sukhumvit", "สยาม": "bts-sukhumvit",
+  "ชิดลม": "bts-sukhumvit", "เพลินจิต": "bts-sukhumvit", "นานา": "bts-sukhumvit",
+  "อโศก": "bts-sukhumvit", "พร้อมพงษ์": "bts-sukhumvit", "ทองหล่อ": "bts-sukhumvit",
+  "เอกมัย": "bts-sukhumvit", "พระโขนง": "bts-sukhumvit", "อ่อนนุช": "bts-sukhumvit",
+  "อุดมสุข": "bts-sukhumvit", "บางนา": "bts-sukhumvit", "แบริ่ง": "bts-sukhumvit",
+  "สำโรง": "bts-sukhumvit", "เคหะ": "bts-sukhumvit",
+  "ศาลาแดง": "bts-silom", "ช่องนนทรี": "bts-silom", "กรุงธนบุรี": "bts-silom",
+  "วงเวียนใหญ่": "bts-silom", "ตลาดพลู": "bts-silom", "บางหว้า": "bts-silom",
+  "ลาดพร้าว": "mrt-blue", "พหลโยธิน": "mrt-blue", "ห้วยขวาง": "mrt-blue",
+  "พระราม 9": "mrt-blue", "เพชรบุรี": "mrt-blue", "สุขุมวิท": "mrt-blue",
+  "สีลม": "mrt-blue", "สามย่าน": "mrt-blue", "ท่าพระ": "mrt-blue",
+  "หัวหมาก": "arl", "ลาดกระบัง": "arl"
+};
+
+function crowdReportFrom(text) {
+  if (!crowdWords.test(text)) return null;
+  const station = Object.keys(stationLineHints).sort((a, b) => b.length - a.length).find((name) => text.includes(name));
+  if (!station) return null;
+  const explicitLines = linesFor(text, []);
+  const lineId = explicitLines.length === 1 ? explicitLines[0] : stationLineHints[station];
+  const level = /(แน่นมาก|เยอะมาก|ล้นสถานี|เต็มชานชาลา|ขึ้นรถไม่ได้)/i.test(text) ? 3 : 2;
+  return { station, lineId, level };
+}
+
 const incident = /(ขัดข้อง|ล่าช้า|งดให้บริการ|หยุดเดินรถ|ปิดสถานี|น้ำท่วม|อุบัติเหตุ|เหตุฉุกเฉิน|เดินรถทางเดียว|ระบบสำรอง)/i;
 const resolved = /(กลับมาให้บริการตามปกติ|เปิดให้บริการตามปกติแล้ว|กลับมาเปิดให้บริการ|แก้ไขเรียบร้อย|resumed normal|service.*resumed)/i;
 
@@ -105,6 +146,8 @@ const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const candidates = new Map();
 const resolvedLines = new Set();
+const crowdCandidates = new Map();
+const currentCrowdUrls = new Set((current.crowdReports || []).map((report) => report.sourceUrl));
 
 for (const source of sources) {
   try {
@@ -144,9 +187,40 @@ for (const source of sources) {
   }
 }
 
+
+for (const source of crowdSources) {
+  try {
+    await page.goto(source.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForTimeout(3000);
+    const rawText = (await page.locator("body").innerText()).replace(/\s+/g, " ").trim();
+    const postUrl = await page.locator('a[href*="/posts/"], a[href*="/permalink/"]').evaluateAll((links) => {
+      const href = links.map((link) => link.href).find(Boolean);
+      return href ? href.split("?")[0] : "";
+    });
+    const cleaned = cleanPostText(rawText);
+    const report = crowdReportFrom(cleaned);
+    if (!report || !postUrl || currentCrowdUrls.has(postUrl)) continue;
+    const id = "crowd-" + report.lineId + "-" + Buffer.from(postUrl).toString("base64url").slice(-48);
+    crowdCandidates.set(id, {
+      id,
+      lineId: report.lineId,
+      station: report.station,
+      direction: null,
+      level: report.level,
+      summary: report.station + (report.level === 3 ? " มีรายงานว่าผู้โดยสารหนาแน่นมาก" : " มีรายงานว่าผู้โดยสารค่อนข้างหนาแน่น"),
+      reportedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      sourceName: source.name,
+      sourceUrl: postUrl
+    });
+  } catch (error) {
+    console.warn("Skipped crowd source " + source.name + ": " + error.message);
+  }
+}
+
 await browser.close();
 for (const lineId of resolvedLines) candidates.delete(lineId);
-if (!candidates.size && !resolvedLines.size) {
+if (!candidates.size && !resolvedLines.size && !crowdCandidates.size) {
   console.log("No alert change");
   process.exit(0);
 }
@@ -157,6 +231,6 @@ const updated = await api({
     Authorization: "Bearer " + updateToken,
     "Content-Type": "application/json"
   },
-  body: JSON.stringify({ alerts: [...candidates.values()], resolvedLineIds: [...resolvedLines] })
+  body: JSON.stringify({ alerts: [...candidates.values()], resolvedLineIds: [...resolvedLines], crowdReports: [...crowdCandidates.values()] })
 });
 console.log(JSON.stringify(updated));
