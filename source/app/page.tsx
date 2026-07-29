@@ -138,6 +138,23 @@ const nearbyCategories = [
   ["🏨", "โรงแรม"], ["🌳", "สวนและที่เที่ยว"], ["☕", "คาเฟ่"],
 ] as const;
 
+type SurfaceConnections = { buses?: string[]; boats?: string[]; other?: string[] };
+const surfaceConnections: Record<string, SurfaceConnections> = {
+  "bts-sukhumvit|อโศก": { buses: ["2", "25", "38", "40", "48", "98", "136", "185", "501", "508", "511"] },
+  "bts-sukhumvit|อ่อนนุช": { buses: ["2", "23", "25", "38", "45", "46", "48", "116", "132", "507", "508", "511", "3-1", "3-6", "3-8"] },
+  "bts-sukhumvit|ปุณณวิถี": { buses: ["507"] },
+  "bts-sukhumvit|หมอชิต": { buses: ["3", "8", "26", "29", "34", "39", "44", "52", "59", "63", "77", "96", "104", "134", "136", "145", "503", "509", "510"] },
+  "bts-silom|บางหว้า": { buses: ["7", "80", "81", "84", "89", "91", "101", "146", "147", "198", "509", "547", "2-27", "4-45", "4-57"], boats: ["เรือคลองภาษีเจริญ · ท่าเรือบางหว้า"] },
+  "bts-silom|สะพานตากสิน": { boats: ["เรือด่วนเจ้าพระยา · ธงส้ม", "เรือด่วนเจ้าพระยา · ธงเหลือง/เขียว/แดงตามรอบ", "เรือท่องเที่ยวเจ้าพระยา · ธงฟ้า", "เรือข้ามฟาก · ท่าเรือสาทร"] },
+  "gold|เจริญนคร": { boats: ["เรือรับส่ง ICONSIAM · ท่าเรือไอคอนสยาม"] },
+  "gold|คลองสาน": { boats: ["เรือข้ามฟากคลองสาน–สี่พระยา", "เรือด่วนเจ้าพระยา · ต่อที่ท่าสี่พระยา"] },
+  "mrt-blue|เพชรบุรี": { boats: ["เรือคลองแสนแสบ · ท่าเรืออโศก"] },
+  "arl|มักกะสัน": { boats: ["เรือคลองแสนแสบ · ท่าเรืออโศก"] },
+  "mrt-blue|สนามไชย": { boats: ["เรือด่วนเจ้าพระยา · ท่าราชินี", "เรือข้ามฟากฝั่งธนบุรีตามรอบ"] },
+  "mrt-blue|หัวลำโพง": { buses: ["4", "21", "25", "40", "53", "73", "85", "109", "113", "507", "529"] },
+  "arl|สุวรรณภูมิ": { buses: ["S1", "Airport Shuttle Bus"], other: ["รถโดยสารสนามบิน · อาคารผู้โดยสาร"] },
+};
+
 const routeNodes = railLines.flatMap((routeLine) => routeLine.stations.map((routeStation, stationIndex) => ({
   id: `${routeLine.id}:${stationIndex}`,
   lineId: routeLine.id,
@@ -700,6 +717,19 @@ export default function Home() {
   const mapDelta = 0.012;
   const mapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${mapLocation.lon - mapDelta}%2C${mapLocation.lat - mapDelta}%2C${mapLocation.lon + mapDelta}%2C${mapLocation.lat + mapDelta}&layer=mapnik&marker=${mapLocation.lat}%2C${mapLocation.lon}`;
   const mapSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`สถานี${mapStation} ${mapLine.name}`)}`;
+  const sameNameRailConnections = railLines.filter((item) => item.id !== mapLine.id && item.stations.includes(mapStation));
+  const pairedRailConnections = explicitInterchanges.flatMap(([first, second]) => {
+    const selectedIsFirst = first[0] === mapLine.id && first[1] === mapStation;
+    const selectedIsSecond = second[0] === mapLine.id && second[1] === mapStation;
+    const pair = selectedIsFirst ? second : selectedIsSecond ? first : null;
+    const pairLine = pair ? railLines.find((item) => item.id === pair[0]) : null;
+    return pair && pairLine ? [{ line: pairLine, station: pair[1] }] : [];
+  });
+  const railConnections = [
+    ...sameNameRailConnections.map((item) => ({ line: item, station: mapStation })),
+    ...pairedRailConnections,
+  ].filter((item, index, items) => items.findIndex((candidate) => candidate.line.id === item.line.id && candidate.station === item.station) === index);
+  const selectedSurfaceConnections = surfaceConnections[`${mapLine.id}|${mapStation}`] ?? {};
 
   function selectLine(nextLine: RailLine) {
     setLineId(nextLine.id);
@@ -877,6 +907,17 @@ export default function Home() {
               <div className="nearby-category-grid" aria-label="ค้นหาสถานที่ใกล้สถานี">
                 {nearbyCategories.map(([icon, category]) => <a key={category} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${category} ใกล้สถานี${mapStation} ${mapLine.name}`)}`} target="_blank" rel="noreferrer"><b>{icon}</b><span>{category}</span><small>ค้นหารอบสถานี ↗</small></a>)}
               </div>
+
+              <section className="connections-card" aria-label="การเดินทางเชื่อมต่อจากสถานีนี้">
+                <div className="connections-heading"><div><p className="eyebrow dark">CONNECT HERE</p><h3>ต่อรถ · ราง · เรือ</h3></div><span>จากสถานี{mapStation}</span></div>
+                <div className="connection-groups">
+                  <article><i>🚆</i><div><small>รถไฟฟ้าและรถไฟ</small>{railConnections.length ? railConnections.map(({ line: connectionLine, station: connectionStation }) => <button key={`${connectionLine.id}-${connectionStation}`} onClick={() => showMapStation(connectionLine.id, connectionStation)}><b style={{ background: connectionLine.color }}>{connectionLine.short}</b><span>{connectionLine.name}<em>สถานี{connectionStation}</em></span></button>) : <span className="no-connection">ไม่พบสถานีเปลี่ยนสายที่เชื่อมตรง</span>}</div></article>
+                  <article><i>🚌</i><div><small>รถโดยสารใกล้สถานี</small>{selectedSurfaceConnections.buses?.length ? <p className="route-chips">{selectedSurfaceConnections.buses.map((route) => <b key={route}>สาย {route}</b>)}</p> : <span className="no-connection">เปิดแผนที่เพื่อตรวจสายรถที่ป้ายใกล้ที่สุด</span>}<a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`ป้ายรถเมล์ ใกล้สถานี${mapStation} ${mapLine.name}`)}`} target="_blank" rel="noreferrer">ดูป้ายรถโดยสารบนแผนที่ ↗</a></div></article>
+                  <article><i>⛴</i><div><small>เรือและท่าเรือ</small>{selectedSurfaceConnections.boats?.length ? <ul>{selectedSurfaceConnections.boats.map((boat) => <li key={boat}>{boat}</li>)}</ul> : <span className="no-connection">ไม่พบจุดต่อเรือสำคัญที่ยืนยันไว้ใกล้สถานีนี้</span>}<a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`ท่าเรือ ใกล้สถานี${mapStation} ${mapLine.name}`)}`} target="_blank" rel="noreferrer">ค้นหาท่าเรือใกล้สถานี ↗</a></div></article>
+                  {selectedSurfaceConnections.other?.length ? <article><i>🚐</i><div><small>บริการเชื่อมต่ออื่น</small><ul>{selectedSurfaceConnections.other.map((item) => <li key={item}>{item}</li>)}</ul></div></article> : null}
+                </div>
+                <p>หมายเลขรถโดยสารและรอบเรืออาจเปลี่ยนตามการปรับเส้นทางหรือช่วงเวลา โปรดตรวจป้าย ณ จุดขึ้นและแอปของผู้ให้บริการอีกครั้ง</p>
+              </section>
 
               <div className="map-actions">
                 <a className="map-primary-link" href={mapSearchUrl} target="_blank" rel="noreferrer">เปิดแผนที่เต็มและนำทาง ↗</a>
