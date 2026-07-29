@@ -1,4 +1,1 @@
-{
-  "generatedAt": "2026-07-29T00:00:00.000Z",
-  "alerts": []
-}
+{"generatedAt":"2026-07-29T13:45:46.892Z","alerts":[{"lineId":"arl","affectedArea":"ลาดกระบัง–บ้านทับช้าง (มุ่งหน้าพญาไท)","summary":"อัปเดต: ARL ยังขัดข้อง ผู้โดยสารหนาแน่น; เดินรถด้วยระบบสำรอง ความถี่ประมาณ 15 นาที","delayMinutes":[15,15],"updatedAt":"2026-07-29T12:35:02.240Z","sourceName":"ข่าวนวัตกรรมขนส่งเดลินิวส์","sourceUrl":"https://www.facebook.com/TransportDailynews/posts/pfbid02aZ4R1GuZmLnaTCM8YKdHuPRwbkMTVHCSpnLfYAaRG8wV7tmfMiUheeQdamzb1azRl","detector":"direct-monitor"}]}
