@@ -51,8 +51,8 @@ function frequency(text) {
   return match ? Number(match[1]) : null;
 }
 
-async function api(options) {
-  const response = await fetch(endpoint, {
+async function api(options, target = endpoint) {
+  const response = await fetch(target, {
     ...options,
     headers: {
       "OAI-Sites-Authorization": "Bearer " + bypassToken,
@@ -63,7 +63,7 @@ async function api(options) {
   return response.json();
 }
 
-const current = await api({});
+const current = await api({}, endpoint.replace(/\/update$/, ""));
 const currentByLine = new Map((current.alerts || []).map((alert) => [alert.lineId, alert]));
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
