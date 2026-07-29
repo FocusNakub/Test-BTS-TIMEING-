@@ -634,7 +634,11 @@ export default function Home() {
       try { setSavedAccessPoints(JSON.parse(savedAccess)); } catch {}
     }
     setReady(true);
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => undefined);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+        .then((registration) => registration.update())
+        .catch(() => undefined);
+    }
   }, []);
 
   useEffect(() => {
