@@ -40,7 +40,7 @@ jobs:
         run: |
           curl --fail --silent --show-error \
             "https://bangkok-rail-daily-2026.pp5074160.chatgpt.site/api/service-alerts" \
-            -H "OAI-Sites-Authorization: Bearer \$SITES_BYPASS_TOKEN" \
+            -H "OAI-Sites-Authorization: Bearer $SITES_BYPASS_TOKEN" \
             --output /tmp/service-alerts.json
           jq -e '.alerts | type == "array"' /tmp/service-alerts.json >/dev/null
       - name: Publish changed alerts
