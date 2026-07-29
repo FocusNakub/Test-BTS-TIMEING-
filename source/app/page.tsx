@@ -150,15 +150,41 @@ function frequencyInfo(seconds: number, periodLabel: string, sourceLabel: string
   return { seconds, periodLabel, sourceLabel, sourceUrl, official };
 }
 
-function serviceHours(line: RailLine) {
-  const opensAt = ["arl", "red-dark", "red-light"].includes(line.id) ? 5 * 60 + 30 : 6 * 60;
-  return { opensAt, closesAt: 24 * 60 };
+function serviceHours(line: RailLine, date: Date) {
+  const weekday = date.getDay() > 0 && date.getDay() < 6;
+
+  if (line.id === "bts-sukhumvit" || line.id === "bts-silom") {
+    return { opensAt: 5 * 60 + 15, closesAt: 24 * 60 + 15, source: frequencySources.green };
+  }
+  if (line.id === "mrt-purple") {
+    return { opensAt: weekday ? 5 * 60 + 30 : 6 * 60, closesAt: 24 * 60, source: frequencySources.bem };
+  }
+  if (line.id === "mrt-yellow") {
+    return { opensAt: 5 * 60 + 30, closesAt: 24 * 60, source: frequencySources.yellow };
+  }
+  if (line.id === "mrt-pink") {
+    return { opensAt: 5 * 60 + 24, closesAt: 24 * 60, source: frequencySources.pink };
+  }
+  if (line.id === "red-dark" || line.id === "red-light") {
+    return { opensAt: 5 * 60, closesAt: 24 * 60, source: frequencySources.red };
+  }
+  if (line.id === "arl") {
+    return { opensAt: 5 * 60 + 30, closesAt: 24 * 60, source: operatorSources.arl.url };
+  }
+  return { opensAt: 6 * 60, closesAt: 24 * 60, source: line.id === "gold" ? frequencySources.gold : frequencySources.bem };
 }
 
 function isOutsideServiceHours(line: RailLine, date: Date) {
   const minutes = date.getHours() * 60 + date.getMinutes();
-  const hours = serviceHours(line);
-  return minutes < hours.opensAt || minutes >= hours.closesAt;
+  const hours = serviceHours(line, date);
+  const afterMidnightEnd = hours.closesAt - 24 * 60;
+  const insideAfterMidnight = hours.closesAt > 24 * 60 && minutes < afterMidnightEnd;
+  return !insideAfterMidnight && (minutes < hours.opensAt || minutes >= Math.min(hours.closesAt, 24 * 60));
+}
+
+function formatClock(minutes: number) {
+  const normalized = minutes % (24 * 60);
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
 }
 
 function getFrequency(line: RailLine, station: string, date: Date): FrequencyInfo {
@@ -221,7 +247,7 @@ function getFrequency(line: RailLine, station: string, date: Date): FrequencyInf
   }
 
   if (line.id === "red-dark") {
-    const peak = weekday && (band(hour, 7, 9) || band(hour, 17, 19));
+    const peak = weekday && (band(hour, 7, 9.5) || band(hour, 17, 19.5));
     return official(peak ? 600 : 900, peak ? "ช่วงตามตารางทุก 10 นาที" : "ช่วงตามตารางทุก 15 นาที", "ตารางรถไฟฟ้าสายสีแดง", frequencySources.red);
   }
 
@@ -532,7 +558,7 @@ export default function Home() {
               <div className="arrival-copy">
                 <small>{serviceClosed ? "นอกเวลาให้บริการปกติ" : "ประกาศเหตุขัดข้อง"}</small>
                 <strong>{serviceClosed ? "ไม่มีขบวนถัดไปในขณะนี้" : "ยังไม่ทราบเวลาให้บริการถัดไป"}</strong>
-                <span>{serviceClosed ? `เริ่มให้บริการปกติประมาณ ${serviceHours(line).opensAt === 330 ? "05:30" : "06:00"} น. โปรดตรวจสอบเที่ยวแรกของสถานี` : "โปรดรอประกาศกลับมาเดินรถจากผู้ให้บริการ"}</span>
+                <span>{serviceClosed ? `เริ่มให้บริการเที่ยวแรกของระบบประมาณ ${formatClock(serviceHours(line, now).opensAt)} น. เวลาแต่ละสถานีและทิศทางอาจต่างกัน` : "โปรดรอประกาศกลับมาเดินรถจากผู้ให้บริการ"}</span>
               </div>
             </article>
           ) : directionTrips.map((trip) => (
@@ -549,7 +575,7 @@ export default function Home() {
               </div>
             </article>
           ))}
-          <div className="truth-note"><span>i</span><p><strong>ยังไม่ใช่ตำแหน่งรถสด</strong> {serviceClosed ? "ระบบหยุดคำนวณขบวนและความหนาแน่นเมื่ออยู่นอกเวลาให้บริการปกติ เที่ยวแรกและเที่ยวสุดท้ายจริงต่างกันตามสถานี" : serviceAlert ? announcedFrequencyMinutes ? `ประกาศระบุเพียงความถี่ ${announcedFrequencyMinutes} นาที จึงแสดงเป็น “ภายใน” ไม่ใช่เวลารถถึงจริง` : announcedDelayMinutes ? `นำเวลาล่าช้าตามประกาศ ${announcedDelayMinutes} นาทีมาบวกกับค่าคาดการณ์เดิม` : "มีเหตุขัดข้องแต่ประกาศไม่ได้ระบุเวลาล่าช้า จึงไม่เพิ่มตัวเลขเอง" : <>ใช้{frequency.periodLabel} · {frequency.sourceUrl ? <a href={frequency.sourceUrl} target="_blank" rel="noreferrer">{frequency.sourceLabel} ↗</a> : frequency.sourceLabel}</>} โปรดตรวจสอบจอชานชาลาและปลายทางจริง</p></div>
+          <div className="truth-note"><span>i</span><p><strong>ยังไม่ใช่ตำแหน่งรถสด</strong> {serviceClosed ? <>ระบบหยุดคำนวณขบวนและความหนาแน่นเมื่ออยู่นอกกรอบตารางปกติ เที่ยวแรก–สุดท้ายจริงต่างกันตามสถานีและทิศทาง · <a href={serviceHours(line, now).source} target="_blank" rel="noreferrer">ตรวจตารางทางการ ↗</a></> : serviceAlert ? announcedFrequencyMinutes ? `ประกาศระบุเพียงความถี่ ${announcedFrequencyMinutes} นาที จึงแสดงเป็น “ภายใน” ไม่ใช่เวลารถถึงจริง` : announcedDelayMinutes ? `นำเวลาล่าช้าตามประกาศ ${announcedDelayMinutes} นาทีมาบวกกับค่าคาดการณ์เดิม` : "มีเหตุขัดข้องแต่ประกาศไม่ได้ระบุเวลาล่าช้า จึงไม่เพิ่มตัวเลขเอง" : <>ใช้{frequency.periodLabel} · {frequency.sourceUrl ? <a href={frequency.sourceUrl} target="_blank" rel="noreferrer">{frequency.sourceLabel} ↗</a> : frequency.sourceLabel}</>} โปรดตรวจสอบจอชานชาลาและปลายทางจริง</p></div>
         </section>
 
         <section className="density-section">
