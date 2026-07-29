@@ -2,9 +2,10 @@ name: Update weather and road conditions
 
 on:
   schedule:
-    # Asia/Bangkok: hourly from 05:00 through 00:00. Rail news remains every 15 minutes.
-    - cron: "0 22 * * *"
-    - cron: "0 23,0-17 * * *"
+    # Asia/Bangkok: hourly at :11 from 05:11 through 00:11.
+    # Avoid minute 00 because GitHub documents higher scheduler load then.
+    - cron: "11 22 * * *"
+    - cron: "11 23,0-17 * * *"
   workflow_dispatch:
 
 permissions:

@@ -2,10 +2,11 @@ name: Cloud rail monitor and publish
 
 on:
   schedule:
-    # Asia/Bangkok: every 15 minutes from 05:00–00:30; pause 00:45–04:45.
-    - cron: "*/15 22 * * *"
-    - cron: "*/15 23,0-16 * * *"
-    - cron: "0,15,30 17 * * *"
+    # Asia/Bangkok: offset away from the busiest GitHub scheduler minutes.
+    # Check about every 15 minutes from 05:07–00:22, with a final 00:30 check.
+    - cron: "7,22,37,52 22 * * *"
+    - cron: "7,22,37,52 23,0-16 * * *"
+    - cron: "7,22,30 17 * * *"
   workflow_dispatch:
 
 permissions:
