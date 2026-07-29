@@ -1,4 +1,4 @@
-name: Update rail service alerts
+name: Sync rail service alerts
 
 on:
   schedule:
@@ -18,19 +18,25 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Check official-source news
-        run: node scripts/update-service-alerts.mjs
+      - name: Fetch live alert status
+        env:
+          SITES_BYPASS_TOKEN: ${{ secrets.SITES_BYPASS_TOKEN }}
+        run: |
+          curl --fail --silent --show-error \
+            "https://bangkok-rail-daily-2026.pp5074160.chatgpt.site/api/service-alerts" \
+            -H "OAI-Sites-Authorization: Bearer $SITES_BYPASS_TOKEN" \
+            --output /tmp/service-alerts.json
+          jq -e '.alerts | type == "array"' /tmp/service-alerts.json >/dev/null
       - name: Publish changed alerts
         run: |
-          if git diff --quiet -- public/service-alerts.json service-alerts.json; then
+          if diff -q <(jq -S '.alerts' /tmp/service-alerts.json) <(jq -S '.alerts' service-alerts.json) >/dev/null; then
             echo "No alert change"
             exit 0
           fi
+          cp /tmp/service-alerts.json service-alerts.json
+          cp /tmp/service-alerts.json public/service-alerts.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/service-alerts.json service-alerts.json
-          git commit -m "Update rail service alerts"
+          git add service-alerts.json public/service-alerts.json
+          git commit -m "Sync rail service alerts"
           git push
