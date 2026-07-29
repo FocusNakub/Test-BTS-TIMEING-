@@ -584,6 +584,7 @@ function crowdLabel(value: number) {
 }
 
 export default function Home() {
+  const [disclaimerOpen, setDisclaimerOpen] = useState(true);
   const [activeView, setActiveView] = useState<ViewMode>("trains");
   const [mapMode, setMapMode] = useState<MapMode>("nearby");
   const [mapInfoTab, setMapInfoTab] = useState<MapInfoTab>("exits");
@@ -1171,6 +1172,26 @@ export default function Home() {
         </footer>
         </>}
       </div>
+
+      {disclaimerOpen && (
+        <div className="disclaimer-backdrop">
+          <section className="disclaimer-dialog" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title" aria-describedby="disclaimer-description">
+            <div className="disclaimer-symbol" aria-hidden="true">i</div>
+            <p className="disclaimer-eyebrow">คำชี้แจงก่อนเดินทาง</p>
+            <h2 id="disclaimer-title">เว็บไซต์นี้ยังอยู่ระหว่างพัฒนา</h2>
+            <p id="disclaimer-description" className="disclaimer-lead">ข้อมูลบางส่วนอาจยังไม่ครบถ้วนหรือคลาดเคลื่อน กรุณาใช้เพื่อช่วยวางแผนเบื้องต้นเท่านั้น</p>
+            <div className="disclaimer-points">
+              <div><span aria-hidden="true">⏱</span><p><strong>เวลาและขบวนถัดไป</strong><small>เป็นค่าคำนวณจากตารางและความถี่ ไม่ใช่ตำแหน่งรถแบบเรียลไทม์</small></p></div>
+              <div><span aria-hidden="true">●</span><p><strong>ความหนาแน่นรายตู้</strong><small>เป็นค่าประเมินจากช่วงเวลาและรูปแบบการเดินทาง ไม่ใช่ข้อมูลจริงจากผู้ให้บริการ</small></p></div>
+              <div><span aria-hidden="true">⌖</span><p><strong>แผนที่ ทางออก และจุดต่อรถ</strong><small>อาจไม่ครบหรือมีการเปลี่ยนแปลง โปรดตรวจสอบป้ายบริเวณสถานีอีกครั้ง</small></p></div>
+              <div><span aria-hidden="true">!</span><p><strong>ข่าวแจ้งเตือน</strong><small>รวบรวมจากประกาศและข่าวสาธารณะ จึงอาจล่าช้าหรือตกหล่นได้</small></p></div>
+            </div>
+            <div className="disclaimer-important"><strong>ก่อนออกเดินทาง</strong><span>โปรดตรวจสอบจอชานชาลา ป้ายสถานี และประกาศทางการของผู้ให้บริการ</span></div>
+            <button autoFocus type="button" onClick={() => setDisclaimerOpen(false)}>เข้าใจแล้ว · เริ่มใช้งาน</button>
+            <small className="disclaimer-footnote">Bangkok Rail Daily ไม่ใช่เว็บไซต์ทางการ และคำชี้แจงนี้จะแสดงทุกครั้งที่เปิดเว็บ</small>
+          </section>
+        </div>
+      )}
 
       {pickerOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setPickerOpen(false); }}>
