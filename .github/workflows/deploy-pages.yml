@@ -1,0 +1,59 @@
+name: Build and deploy Bangkok Rail Daily
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "source/**"
+      - "service-alerts.json"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: source/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Build static GitHub Pages site
+        working-directory: source
+        env:
+          NEXT_PUBLIC_ALERT_FEED_URL: /Test-BTS-TIMEING-/service-alerts.json
+        run: |
+          mv app/api "$RUNNER_TEMP/site-api"
+          GITHUB_PAGES=1 pnpm exec next build
+          cp ../service-alerts.json out/service-alerts.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: source/out
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
