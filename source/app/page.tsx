@@ -819,19 +819,64 @@ export default function Home() {
     return normalized ? line.stations.filter((item) => item.toLowerCase().includes(normalized)) : line.stations;
   }, [line.stations, query]);
 
+// Official first/last train times per station for the Pink Line, from the
+// operator's own published PDF (one card per station, both directions
+// stated directly — not interpolated). toB = toward Min Buri (terminalB),
+// toA = toward Nonthaburi Civic Center (terminalA). Minutes since midnight;
+// times after midnight are 24:00+ so they sort correctly across the rollover.
+const pinkLineSchedule: Record<string, { toB?: [number, number]; toA?: [number, number] }> = {
+  "ศูนย์ราชการนนทบุรี": { toB: [330, 1440] },
+  "แคราย": { toB: [332, 1442], toA: [324, 1498] },
+  "สนามบินน้ำ": { toB: [324, 1444], toA: [332, 1496] },
+  "สามัคคี": { toB: [326, 1446], toA: [329, 1493] },
+  "กรมชลประทาน": { toB: [328, 1448], toA: [328, 1492] },
+  "แยกปากเกร็ด": { toB: [330, 1450], toA: [326, 1490] },
+  "เลี่ยงเมืองปากเกร็ด": { toB: [332, 1452], toA: [324, 1488] },
+  "แจ้งวัฒนะ-ปากเกร็ด 28": { toB: [324, 1454], toA: [331, 1485] },
+  "ศรีรัช": { toB: [326, 1456], toA: [329, 1483] },
+  "เมืองทองธานี": { toB: [329, 1459], toA: [327, 1480] },
+  "แจ้งวัฒนะ 14": { toB: [331, 1461], toA: [324, 1478] },
+  "ศูนย์ราชการเฉลิมพระเกียรติ": { toB: [324, 1463], toA: [333, 1477] },
+  "ทีโอที": { toB: [326, 1465], toA: [331, 1475] },
+  "หลักสี่": { toB: [327, 1467], toA: [329, 1473] },
+  "ราชภัฏพระนคร": { toB: [330, 1468], toA: [327, 1471] },
+  "วัดพระศรีมหาธาตุ": { toB: [332, 1471], toA: [325, 1469] },
+  "รามอินทรา 3": { toB: [324, 1473], toA: [332, 1467] },
+  "ลาดปลาเค้า": { toB: [326, 1475], toA: [330, 1464] },
+  "รามอินทรา กม.4": { toB: [328, 1477], toA: [328, 1462] },
+  "มัยลาภ": { toB: [330, 1479], toA: [326, 1461] },
+  "วัชรพล": { toB: [332, 1481], toA: [324, 1459] },
+  "รามอินทรา กม.6": { toB: [324, 1483], toA: [333, 1457] },
+  "คู้บอน": { toB: [326, 1485], toA: [331, 1455] },
+  "รามอินทรา กม.9": { toB: [328, 1487], toA: [329, 1453] },
+  "วงแหวนรามอินทรา": { toB: [330, 1489], toA: [326, 1451] },
+  "นพรัตนราชธานี": { toB: [332, 1491], toA: [324, 1448] },
+  "บางชัน": { toB: [325, 1494], toA: [333, 1446] },
+  "เศรษฐบุตรบำเพ็ญ": { toB: [327, 1496], toA: [331, 1444] },
+  "ตลาดมีนบุรี": { toB: [329, 1498], toA: [329, 1442] },
+  "มีนบุรี": { toA: [327, 1440] }
+};
+
 function stationHasService(line: RailLine, station: string, direction: number, date: Date) {
   const hours = serviceHours(line, date);
   const minutes = date.getHours() * 60 + date.getMinutes();
-  // How long after the line's published opening time the *first* train can
-  // physically reach this station, and how long before the published
-  // closing time the *last* train through here (continuing in this
-  // direction) must have already passed, given its travel time to/from the
-  // far end of the line. Both push the window inward (more conservative),
-  // never outward — matches the "don't claim a train that isn't there" rule.
-  const openOffsetMin = stationOffsetSeconds(line, station, direction) / 60;
-  const closeOffsetMin = stationOffsetSeconds(line, station, direction === 1 ? 0 : 1) / 60;
-  const effectiveOpensAt = hours.opensAt + openOffsetMin;
-  const effectiveClosesAt = hours.closesAt - closeOffsetMin;
+  const pinkEntry = line.id === "mrt-pink" ? pinkLineSchedule[station]?.[direction === 1 ? "toB" : "toA"] : undefined;
+  let effectiveOpensAt: number;
+  let effectiveClosesAt: number;
+  if (pinkEntry) {
+    [effectiveOpensAt, effectiveClosesAt] = pinkEntry;
+  } else {
+    // How long after the line's published opening time the *first* train can
+    // physically reach this station, and how long before the published
+    // closing time the *last* train through here (continuing in this
+    // direction) must have already passed, given its travel time to/from the
+    // far end of the line. Both push the window inward (more conservative),
+    // never outward — matches the "don't claim a train that isn't there" rule.
+    const openOffsetMin = stationOffsetSeconds(line, station, direction) / 60;
+    const closeOffsetMin = stationOffsetSeconds(line, station, direction === 1 ? 0 : 1) / 60;
+    effectiveOpensAt = hours.opensAt + openOffsetMin;
+    effectiveClosesAt = hours.closesAt - closeOffsetMin;
+  }
   const afterMidnightEnd = effectiveClosesAt - 24 * 60;
   const insideAfterMidnight = effectiveClosesAt > 24 * 60 && minutes < afterMidnightEnd;
   return insideAfterMidnight || (minutes >= effectiveOpensAt && minutes < Math.min(effectiveClosesAt, 24 * 60));
