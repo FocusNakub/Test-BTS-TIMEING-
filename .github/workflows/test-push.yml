@@ -10,6 +10,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Check token is not empty
+        env:
+          ALERT_UPDATE_TOKEN: ${{ secrets.ALERT_UPDATE_TOKEN }}
+        run: |
+          if [ -z "$ALERT_UPDATE_TOKEN" ]; then
+            echo "::error::ALERT_UPDATE_TOKEN is EMPTY in this job context"
+            exit 1
+          fi
+          echo "Token length: ${#ALERT_UPDATE_TOKEN} characters"
       - name: Send test push
         env:
           ALERT_UPDATE_TOKEN: ${{ secrets.ALERT_UPDATE_TOKEN }}
