@@ -530,16 +530,172 @@ const avgHopSeconds: Record<string, number> = {
   arl: 240 // express commuter rail, widest spacing of all lines listed here
 };
 
-function stationOffsetSeconds(line: RailLine, station: string, direction: number) {
+// Where a line's real first-train time is known (see officialSchedules
+// below), anchor the intraday countdown cycle to that actual clock time
+// instead of assuming a train departs at an exact multiple of the headway
+// counted from midnight. This makes e.g. Pink Line trains toward Nonthaburi
+// Civic Center land on 05:27, 05:32, 05:37... (real first train + 5-minute
+// peak headway) rather than an arbitrary phase.
+function originAnchorSeconds(line: RailLine, direction: number) {
+  const terminalStation = direction === 1 ? line.stations[0] : line.stations[line.stations.length - 1];
+  const entry = officialSchedules[line.id]?.[terminalStation]?.[direction === 1 ? "toB" : "toA"];
+  return entry ? entry[0] * 60 : 0;
+}
+
+// Official first/last train times per station, straight from each operator's
+// own published schedule (not interpolated). toB = toward each line's
+// terminalB, toA = toward terminalA. Minutes since midnight; times after
+// midnight are 24:00+ so they sort correctly across the rollover.
+type StationSchedule = Record<string, { toB?: [number, number]; toA?: [number, number] }>;
+
+const officialSchedules: Record<string, StationSchedule> = {
+  "mrt-pink": {
+    "ศูนย์ราชการนนทบุรี": { toB: [330, 1440] },
+    "แคราย": { toB: [332, 1442], toA: [324, 1498] },
+    "สนามบินน้ำ": { toB: [324, 1444], toA: [332, 1496] },
+    "สามัคคี": { toB: [326, 1446], toA: [329, 1493] },
+    "กรมชลประทาน": { toB: [328, 1448], toA: [328, 1492] },
+    "แยกปากเกร็ด": { toB: [330, 1450], toA: [326, 1490] },
+    "เลี่ยงเมืองปากเกร็ด": { toB: [332, 1452], toA: [324, 1488] },
+    "แจ้งวัฒนะ-ปากเกร็ด 28": { toB: [324, 1454], toA: [331, 1485] },
+    "ศรีรัช": { toB: [326, 1456], toA: [329, 1483] },
+    "เมืองทองธานี": { toB: [329, 1459], toA: [327, 1480] },
+    "แจ้งวัฒนะ 14": { toB: [331, 1461], toA: [324, 1478] },
+    "ศูนย์ราชการเฉลิมพระเกียรติ": { toB: [324, 1463], toA: [333, 1477] },
+    "ทีโอที": { toB: [326, 1465], toA: [331, 1475] },
+    "หลักสี่": { toB: [327, 1467], toA: [329, 1473] },
+    "ราชภัฏพระนคร": { toB: [330, 1468], toA: [327, 1471] },
+    "วัดพระศรีมหาธาตุ": { toB: [332, 1471], toA: [325, 1469] },
+    "รามอินทรา 3": { toB: [324, 1473], toA: [332, 1467] },
+    "ลาดปลาเค้า": { toB: [326, 1475], toA: [330, 1464] },
+    "รามอินทรา กม.4": { toB: [328, 1477], toA: [328, 1462] },
+    "มัยลาภ": { toB: [330, 1479], toA: [326, 1461] },
+    "วัชรพล": { toB: [332, 1481], toA: [324, 1459] },
+    "รามอินทรา กม.6": { toB: [324, 1483], toA: [333, 1457] },
+    "คู้บอน": { toB: [326, 1485], toA: [331, 1455] },
+    "รามอินทรา กม.9": { toB: [328, 1487], toA: [329, 1453] },
+    "วงแหวนรามอินทรา": { toB: [330, 1489], toA: [326, 1451] },
+    "นพรัตนราชธานี": { toB: [332, 1491], toA: [324, 1448] },
+    "บางชัน": { toB: [325, 1494], toA: [333, 1446] },
+    "เศรษฐบุตรบำเพ็ญ": { toB: [327, 1496], toA: [331, 1444] },
+    "ตลาดมีนบุรี": { toB: [329, 1498], toA: [329, 1442] },
+    "มีนบุรี": { toA: [327, 1440] }
+  },
+  // Main-line first/last only (published supplementary short-turn trains to
+  // Samrong / Ha Yaek Lat Phrao omitted — those cover only part of the line,
+  // and using them here would overstate how late service runs elsewhere).
+  "bts-sukhumvit": {
+    "คูคต": { toB: [315, 1395] },
+    "แยก คปอ.": { toB: [317, 1397], toA: [338, 1484] },
+    "พิพิธภัณฑ์กองทัพอากาศ": { toB: [319, 1399], toA: [337, 1483] },
+    "โรงพยาบาลภูมิพลอดุลยเดช": { toB: [321, 1401], toA: [335, 1481] },
+    "สะพานใหม่": { toB: [323, 1403], toA: [333, 1478] },
+    "สายหยุด": { toB: [325, 1405], toA: [331, 1477] },
+    "พหลโยธิน 59": { toB: [326, 1406], toA: [330, 1475] },
+    "วัดพระศรีมหาธาตุ": { toB: [328, 1408], toA: [328, 1473] },
+    "กรมทหารราบที่ 11": { toB: [330, 1410], toA: [326, 1471] },
+    "บางบัว": { toB: [332, 1412], toA: [324, 1469] },
+    "กรมป่าไม้": { toB: [333, 1414], toA: [323, 1468] },
+    "มหาวิทยาลัยเกษตรศาสตร์": { toB: [335, 1416], toA: [321, 1466] },
+    "เสนานิคม": { toB: [336, 1417], toA: [319, 1464] },
+    "รัชโยธิน": { toB: [338, 1419], toA: [318, 1463] },
+    "พหลโยธิน 24": { toB: [339, 1420], toA: [316, 1461] },
+    "ห้าแยกลาดพร้าว": { toB: [341, 1422], toA: [315, 1459] },
+    "หมอชิต": { toB: [315, 1426], toA: [357, 1456] },
+    "สะพานควาย": { toB: [316, 1427], toA: [355, 1454] },
+    "อารีย์": { toB: [319, 1430], toA: [353, 1451] },
+    "สนามเป้า": { toB: [320, 1431], toA: [351, 1450] },
+    "อนุสาวรีย์ชัยสมรภูมิ": { toB: [323, 1434], toA: [349, 1447] },
+    "พญาไท": { toB: [325, 1436], toA: [347, 1445] },
+    "ราชเทวี": { toB: [327, 1438], toA: [346, 1444] },
+    "สยาม": { toB: [329, 1442], toA: [343, 1442] },
+    "ชิดลม": { toB: [331, 1443], toA: [341, 1438] },
+    "เพลินจิต": { toB: [333, 1445], toA: [339, 1436] },
+    "นานา": { toB: [335, 1447], toA: [338, 1435] },
+    "อโศก": { toB: [336, 1449], toA: [336, 1433] },
+    "พร้อมพงษ์": { toB: [338, 1451], toA: [334, 1431] },
+    "ทองหล่อ": { toB: [340, 1453], toA: [332, 1429] },
+    "เอกมัย": { toB: [342, 1454], toA: [330, 1428] },
+    "พระโขนง": { toB: [344, 1456], toA: [328, 1426] },
+    "อ่อนนุช": { toB: [346, 1458], toA: [326, 1424] },
+    "บางจาก": { toB: [348, 1460], toA: [324, 1422] },
+    "ปุณณวิถี": { toB: [349, 1462], toA: [323, 1420] },
+    "อุดมสุข": { toB: [351, 1464], toA: [321, 1419] },
+    "บางนา": { toB: [353, 1466], toA: [319, 1416] },
+    "แบริ่ง": { toB: [355, 1467], toA: [317, 1415] },
+    "สำโรง": { toB: [315, 1470], toA: [315, 1412] },
+    "ปู่เจ้า": { toB: [316, 1472], toA: [330, 1410] },
+    "ช้างเอราวัณ": { toB: [319, 1475], toA: [327, 1407] },
+    "โรงเรียนนายเรือ": { toB: [322, 1477], toA: [324, 1405] },
+    "ปากน้ำ": { toB: [323, 1479], toA: [323, 1403] },
+    "ศรีนครินทร์": { toB: [326, 1482], toA: [320, 1400] },
+    "แพรกษา": { toB: [328, 1484], toA: [318, 1398] },
+    "สายลวด": { toB: [329, 1486], toA: [317, 1397] },
+    "เคหะฯ": { toA: [315, 1395] }
+  },
+  "bts-silom": {
+    "สนามกีฬาแห่งชาติ": { toB: [330, 1440] },
+    "สยาม": { toB: [331, 1442], toA: [354, 1442] },
+    "ราชดำริ": { toB: [334, 1444], toA: [351, 1436] },
+    "ศาลาแดง": { toB: [337, 1447], toA: [349, 1434] },
+    "ช่องนนทรี": { toB: [339, 1449], toA: [347, 1432] },
+    "เซนต์หลุยส์": { toB: [341, 1451], toA: [345, 1430] },
+    "สุรศักดิ์": { toB: [342, 1452], toA: [343, 1428] },
+    "สะพานตากสิน": { toB: [344, 1454], toA: [341, 1426] },
+    "กรุงธนบุรี": { toB: [347, 1457], toA: [339, 1424] },
+    "วงเวียนใหญ่": { toB: [348, 1458], toA: [338, 1423] },
+    "โพธิ์นิมิตร": { toB: [350, 1460], toA: [336, 1421] },
+    "ตลาดพลู": { toB: [352, 1462], toA: [334, 1419] },
+    "วุฒากาศ": { toB: [354, 1464], toA: [332, 1417] },
+    "บางหว้า": { toA: [330, 1415] }
+  }
+};
+
+function hopTravelSeconds(line: RailLine, station: string, direction: number) {
   const index = line.stations.indexOf(station);
   if (index < 0) return 0;
   const hopsFromOrigin = direction === 1 ? index : line.stations.length - 1 - index;
   return hopsFromOrigin * (avgHopSeconds[line.id] ?? 100);
 }
 
+function stationOffsetSeconds(line: RailLine, station: string, direction: number) {
+  return originAnchorSeconds(line, direction) + hopTravelSeconds(line, station, direction);
+}
 
-function getArrival(line: RailLine, station: string, direction: number, date: Date) {
-  const frequency = getFrequency(line, station, date).seconds;
+
+// Lines where the whole fleet cycles out of one depot terminus. For these,
+// the "return leg" direction isn't an independent schedule — it's the same
+// physical trains, still carrying whatever headway they were dispatched
+// with from the depot, now heading back. A train dispatched during peak
+// stays peak-spaced through its entire round trip, not just the outbound
+// half. depotSide identifies which terminal (A or B) trains originate from.
+// Turnaround time at the far end isn't officially published; 4 minutes is a
+// reasonable estimate for platform turnback, not a confirmed number.
+const depotTerminusLines: Record<string, "A" | "B"> = { "mrt-pink": "B" };
+const turnaroundSeconds = 240;
+
+function getArrival(line: RailLine, station: string, direction: number, date: Date): { remaining: number; slot: number } {
+  const depotSide = depotTerminusLines[line.id];
+  const outboundDirection = depotSide === "B" ? 0 : depotSide === "A" ? 1 : null;
+  if (outboundDirection !== null && direction !== outboundDirection) {
+    // Return leg: find when this same train left the depot, then carry that
+    // departure's spacing forward through the full round trip to here.
+    const depotStation = outboundDirection === 0 ? line.stations[line.stations.length - 1] : line.stations[0];
+    const fullTripSeconds = (line.stations.length - 1) * (avgHopSeconds[line.id] ?? 100);
+    const returnHopSeconds = hopTravelSeconds(line, station, direction);
+    const shiftSeconds = fullTripSeconds + turnaroundSeconds + returnHopSeconds;
+    const virtualDate = new Date(date.getTime() - shiftSeconds * 1000);
+    return getArrival(line, depotStation, outboundDirection, virtualDate);
+  }
+  // A train arriving here now was dispatched from the origin roughly this
+  // many seconds ago. The headway that governs its spacing from the train
+  // before it is whichever was in effect back then — not whatever applies
+  // at this instant. Otherwise crossing a peak/off-peak boundary would
+  // instantly retune the spacing of trains already partway down the line,
+  // instead of only affecting trains dispatched after the boundary.
+  const travelSeconds = hopTravelSeconds(line, station, direction);
+  const originDate = new Date(date.getTime() - travelSeconds * 1000);
+  const frequency = getFrequency(line, station, originDate).seconds;
   const offset = stationOffsetSeconds(line, station, direction) % frequency;
   const secondsNow = date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds();
   const period = frequency;
@@ -818,115 +974,6 @@ export default function Home() {
     const normalized = query.trim().toLowerCase();
     return normalized ? line.stations.filter((item) => item.toLowerCase().includes(normalized)) : line.stations;
   }, [line.stations, query]);
-
-// Official first/last train times per station, straight from each operator's
-// own published schedule (not interpolated). toB = toward each line's
-// terminalB, toA = toward terminalA. Minutes since midnight; times after
-// midnight are 24:00+ so they sort correctly across the rollover.
-type StationSchedule = Record<string, { toB?: [number, number]; toA?: [number, number] }>;
-
-const officialSchedules: Record<string, StationSchedule> = {
-  "mrt-pink": {
-    "ศูนย์ราชการนนทบุรี": { toB: [330, 1440] },
-    "แคราย": { toB: [332, 1442], toA: [324, 1498] },
-    "สนามบินน้ำ": { toB: [324, 1444], toA: [332, 1496] },
-    "สามัคคี": { toB: [326, 1446], toA: [329, 1493] },
-    "กรมชลประทาน": { toB: [328, 1448], toA: [328, 1492] },
-    "แยกปากเกร็ด": { toB: [330, 1450], toA: [326, 1490] },
-    "เลี่ยงเมืองปากเกร็ด": { toB: [332, 1452], toA: [324, 1488] },
-    "แจ้งวัฒนะ-ปากเกร็ด 28": { toB: [324, 1454], toA: [331, 1485] },
-    "ศรีรัช": { toB: [326, 1456], toA: [329, 1483] },
-    "เมืองทองธานี": { toB: [329, 1459], toA: [327, 1480] },
-    "แจ้งวัฒนะ 14": { toB: [331, 1461], toA: [324, 1478] },
-    "ศูนย์ราชการเฉลิมพระเกียรติ": { toB: [324, 1463], toA: [333, 1477] },
-    "ทีโอที": { toB: [326, 1465], toA: [331, 1475] },
-    "หลักสี่": { toB: [327, 1467], toA: [329, 1473] },
-    "ราชภัฏพระนคร": { toB: [330, 1468], toA: [327, 1471] },
-    "วัดพระศรีมหาธาตุ": { toB: [332, 1471], toA: [325, 1469] },
-    "รามอินทรา 3": { toB: [324, 1473], toA: [332, 1467] },
-    "ลาดปลาเค้า": { toB: [326, 1475], toA: [330, 1464] },
-    "รามอินทรา กม.4": { toB: [328, 1477], toA: [328, 1462] },
-    "มัยลาภ": { toB: [330, 1479], toA: [326, 1461] },
-    "วัชรพล": { toB: [332, 1481], toA: [324, 1459] },
-    "รามอินทรา กม.6": { toB: [324, 1483], toA: [333, 1457] },
-    "คู้บอน": { toB: [326, 1485], toA: [331, 1455] },
-    "รามอินทรา กม.9": { toB: [328, 1487], toA: [329, 1453] },
-    "วงแหวนรามอินทรา": { toB: [330, 1489], toA: [326, 1451] },
-    "นพรัตนราชธานี": { toB: [332, 1491], toA: [324, 1448] },
-    "บางชัน": { toB: [325, 1494], toA: [333, 1446] },
-    "เศรษฐบุตรบำเพ็ญ": { toB: [327, 1496], toA: [331, 1444] },
-    "ตลาดมีนบุรี": { toB: [329, 1498], toA: [329, 1442] },
-    "มีนบุรี": { toA: [327, 1440] }
-  },
-  // Main-line first/last only (published supplementary short-turn trains to
-  // Samrong / Ha Yaek Lat Phrao omitted — those cover only part of the line,
-  // and using them here would overstate how late service runs elsewhere).
-  "bts-sukhumvit": {
-    "คูคต": { toB: [315, 1395] },
-    "แยก คปอ.": { toB: [317, 1397], toA: [338, 1484] },
-    "พิพิธภัณฑ์กองทัพอากาศ": { toB: [319, 1399], toA: [337, 1483] },
-    "โรงพยาบาลภูมิพลอดุลยเดช": { toB: [321, 1401], toA: [335, 1481] },
-    "สะพานใหม่": { toB: [323, 1403], toA: [333, 1478] },
-    "สายหยุด": { toB: [325, 1405], toA: [331, 1477] },
-    "พหลโยธิน 59": { toB: [326, 1406], toA: [330, 1475] },
-    "วัดพระศรีมหาธาตุ": { toB: [328, 1408], toA: [328, 1473] },
-    "กรมทหารราบที่ 11": { toB: [330, 1410], toA: [326, 1471] },
-    "บางบัว": { toB: [332, 1412], toA: [324, 1469] },
-    "กรมป่าไม้": { toB: [333, 1414], toA: [323, 1468] },
-    "มหาวิทยาลัยเกษตรศาสตร์": { toB: [335, 1416], toA: [321, 1466] },
-    "เสนานิคม": { toB: [336, 1417], toA: [319, 1464] },
-    "รัชโยธิน": { toB: [338, 1419], toA: [318, 1463] },
-    "พหลโยธิน 24": { toB: [339, 1420], toA: [316, 1461] },
-    "ห้าแยกลาดพร้าว": { toB: [341, 1422], toA: [315, 1459] },
-    "หมอชิต": { toB: [315, 1426], toA: [357, 1456] },
-    "สะพานควาย": { toB: [316, 1427], toA: [355, 1454] },
-    "อารีย์": { toB: [319, 1430], toA: [353, 1451] },
-    "สนามเป้า": { toB: [320, 1431], toA: [351, 1450] },
-    "อนุสาวรีย์ชัยสมรภูมิ": { toB: [323, 1434], toA: [349, 1447] },
-    "พญาไท": { toB: [325, 1436], toA: [347, 1445] },
-    "ราชเทวี": { toB: [327, 1438], toA: [346, 1444] },
-    "สยาม": { toB: [329, 1442], toA: [343, 1442] },
-    "ชิดลม": { toB: [331, 1443], toA: [341, 1438] },
-    "เพลินจิต": { toB: [333, 1445], toA: [339, 1436] },
-    "นานา": { toB: [335, 1447], toA: [338, 1435] },
-    "อโศก": { toB: [336, 1449], toA: [336, 1433] },
-    "พร้อมพงษ์": { toB: [338, 1451], toA: [334, 1431] },
-    "ทองหล่อ": { toB: [340, 1453], toA: [332, 1429] },
-    "เอกมัย": { toB: [342, 1454], toA: [330, 1428] },
-    "พระโขนง": { toB: [344, 1456], toA: [328, 1426] },
-    "อ่อนนุช": { toB: [346, 1458], toA: [326, 1424] },
-    "บางจาก": { toB: [348, 1460], toA: [324, 1422] },
-    "ปุณณวิถี": { toB: [349, 1462], toA: [323, 1420] },
-    "อุดมสุข": { toB: [351, 1464], toA: [321, 1419] },
-    "บางนา": { toB: [353, 1466], toA: [319, 1416] },
-    "แบริ่ง": { toB: [355, 1467], toA: [317, 1415] },
-    "สำโรง": { toB: [315, 1470], toA: [315, 1412] },
-    "ปู่เจ้า": { toB: [316, 1472], toA: [330, 1410] },
-    "ช้างเอราวัณ": { toB: [319, 1475], toA: [327, 1407] },
-    "โรงเรียนนายเรือ": { toB: [322, 1477], toA: [324, 1405] },
-    "ปากน้ำ": { toB: [323, 1479], toA: [323, 1403] },
-    "ศรีนครินทร์": { toB: [326, 1482], toA: [320, 1400] },
-    "แพรกษา": { toB: [328, 1484], toA: [318, 1398] },
-    "สายลวด": { toB: [329, 1486], toA: [317, 1397] },
-    "เคหะฯ": { toA: [315, 1395] }
-  },
-  "bts-silom": {
-    "สนามกีฬาแห่งชาติ": { toB: [330, 1440] },
-    "สยาม": { toB: [331, 1442], toA: [354, 1442] },
-    "ราชดำริ": { toB: [334, 1444], toA: [351, 1436] },
-    "ศาลาแดง": { toB: [337, 1447], toA: [349, 1434] },
-    "ช่องนนทรี": { toB: [339, 1449], toA: [347, 1432] },
-    "เซนต์หลุยส์": { toB: [341, 1451], toA: [345, 1430] },
-    "สุรศักดิ์": { toB: [342, 1452], toA: [343, 1428] },
-    "สะพานตากสิน": { toB: [344, 1454], toA: [341, 1426] },
-    "กรุงธนบุรี": { toB: [347, 1457], toA: [339, 1424] },
-    "วงเวียนใหญ่": { toB: [348, 1458], toA: [338, 1423] },
-    "โพธิ์นิมิตร": { toB: [350, 1460], toA: [336, 1421] },
-    "ตลาดพลู": { toB: [352, 1462], toA: [334, 1419] },
-    "วุฒากาศ": { toB: [354, 1464], toA: [332, 1417] },
-    "บางหว้า": { toA: [330, 1415] }
-  }
-};
 
 function stationHasService(line: RailLine, station: string, direction: number, date: Date) {
   const hours = serviceHours(line, date);
