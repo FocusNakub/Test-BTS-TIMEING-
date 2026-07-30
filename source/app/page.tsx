@@ -892,7 +892,7 @@ function stationHasService(line: RailLine, station: string, direction: number, d
     ...(stationIndex < line.stations.length - 1 ? [{ direction: 1, directionKey: 1, destination: line.terminalB, nextStation: line.stations[stationIndex + 1], arrival: getArrival(line, station, 1, now) }] : []),
   ];
   const directionTrips = rawDirectionTrips.filter((trip) => stationHasService(line, station, trip.direction === 1 ? 1 : 0, now));
-  const serviceClosed = isOutsideServiceHours(line, now) || directionTrips.length === 0;
+  const serviceClosed = directionTrips.length === 0;
   const serviceSuspended = Boolean(serviceAlert && /(งดให้บริการ|หยุดเดินรถ|หยุดให้บริการ|ปิดสถานี)/i.test(serviceAlert.summary));
   const trainsUnavailable = serviceClosed || serviceSuspended;
   const announcedFrequencyMinutes = serviceAlert?.delayMinutes && serviceAlert.summary.includes("ความถี่") ? serviceAlert.delayMinutes[0] : null;
