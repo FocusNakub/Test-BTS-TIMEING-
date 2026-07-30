@@ -164,6 +164,19 @@ async function api(options, target = endpoint) {
   return response.json();
 }
 
+// Facebook returns an interstitial to anonymous/automated visitors instead of
+// the real page content far more often than not. When that happens the post
+// text never contains real announcement wording, so treat it as a distinct,
+// loudly-logged case instead of silently falling through to "no incident".
+const loginWallHint = /(เข้าสู่ระบบ Facebook|You must log in|Log into Facebook|log in to continue|See more on Facebook)/i;
+function isLoginWalled(text) {
+  return loginWallHint.test(text) || text.length < 200;
+}
+
+// Map source name -> its configured priority, so we can tell how good the
+// *currently published* alert's source was, not just the ones seen in this run.
+const priorityByName = new Map(sources.map((source) => [source.name, source.priority]));
+
 const current = await api({}, endpoint.replace(/\/update$/, ""));
 const currentByLine = new Map((current.alerts || []).map((alert) => [alert.lineId, alert]));
 const browser = await chromium.launch({ headless: true });
@@ -172,12 +185,17 @@ const candidates = new Map();
 const resolvedLines = new Set();
 const crowdCandidates = new Map();
 const currentCrowdUrls = new Set((current.crowdReports || []).map((report) => report.sourceUrl));
+const staleMs = 3 * 60 * 60 * 1000;
 
 for (const source of sources) {
   try {
     await page.goto(source.url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(2500);
     const { text, postUrl } = await latestPost(page);
+    if (isLoginWalled(text)) {
+      console.warn(`Skipped ${source.name}: looks like a Facebook login/consent wall, not real post content (len=${text.length})`);
+      continue;
+    }
     const affectedLines = linesFor(text, source.lineIds);
     if (!affectedLines.length) continue;
     if (resolved.test(text)) {
@@ -193,6 +211,14 @@ for (const source of sources) {
       if (previousCandidate && previousCandidate.priority >= source.priority) continue;
       const existing = currentByLine.get(lineId);
       if (existing && existing.sourceUrl === postUrl) continue;
+      // Don't let a weaker source (e.g. the generic Dailynews fallback) replace
+      // an already-published, still-fresh alert that came from a stronger
+      // source (e.g. the operator's own page) with a vaguer version.
+      if (existing) {
+        const existingPriority = priorityByName.get(existing.sourceName) ?? 1;
+        const existingAgeMs = Date.now() - new Date(existing.updatedAt).getTime();
+        if (source.priority < existingPriority && existingAgeMs < staleMs) continue;
+      }
       candidates.set(lineId, {
         priority: source.priority,
         lineId,
@@ -216,6 +242,10 @@ for (const source of crowdSources) {
     await page.goto(source.url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(3000);
     const rawText = (await page.locator("body").innerText()).replace(/\s+/g, " ").trim();
+    if (isLoginWalled(rawText)) {
+      console.warn(`Skipped ${source.name}: looks like a Facebook login/consent wall, not real group content (len=${rawText.length})`);
+      continue;
+    }
     const postUrl = await page.locator('a[href*="/posts/"], a[href*="/permalink/"]').evaluateAll((links) => {
       const href = links.map((link) => link.href).find(Boolean);
       return href ? href.split("?")[0] : "";
