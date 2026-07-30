@@ -1,0 +1,19 @@
+name: Manual push test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test push
+        env:
+          ALERT_UPDATE_TOKEN: ${{ secrets.ALERT_UPDATE_TOKEN }}
+        run: |
+          curl -X POST "https://bangkok-rail-daily-2026.pp5074160.chatgpt.site/api/push/test" \
+            -H "Authorization: Bearer $ALERT_UPDATE_TOKEN" \
+            --fail --silent --show-error
