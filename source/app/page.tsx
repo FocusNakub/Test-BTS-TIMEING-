@@ -509,17 +509,45 @@ function getFrequency(line: RailLine, station: string, date: Date): FrequencyInf
   return frequencyInfo(arlPeak ? 600 : 900, arlPeak ? "ช่วงเร่งด่วนโดยประมาณ" : "ช่วงปกติโดยประมาณ", "ยังไม่พบตารางความถี่ทางการที่นำมาใช้ได้", undefined, false);
 }
 
+// Average time (seconds) for a train to travel one station-to-station hop on
+// each line. Bangkok's operators don't publish an exact run-time table per
+// segment (only BTS does, and only as a PDF), so this is calibrated from
+// each line's published total length ÷ station count, at a typical
+// effective speed (~30-35 km/h including acceleration, deceleration, and
+// dwell time). It's an approximation, not a live position — but it makes
+// consecutive stations show times that are consistent with a train actually
+// moving down the line, instead of an unrelated random offset per station.
+const avgHopSeconds: Record<string, number> = {
+  "bts-sukhumvit": 75,
+  "bts-silom": 80,
+  gold: 150, // short automated shuttle (APM), lower speed
+  "mrt-blue": 130,
+  "mrt-purple": 160,
+  "mrt-yellow": 140,
+  "mrt-pink": 125,
+  "red-dark": 180, // commuter rail, wider station spacing, higher line speed
+  "red-light": 260,
+  arl: 240 // express commuter rail, widest spacing of all lines listed here
+};
+
+function stationOffsetSeconds(line: RailLine, station: string, direction: number) {
+  const index = line.stations.indexOf(station);
+  if (index < 0) return 0;
+  const hopsFromOrigin = direction === 1 ? index : line.stations.length - 1 - index;
+  return hopsFromOrigin * (avgHopSeconds[line.id] ?? 100);
+}
+
+
 function getArrival(line: RailLine, station: string, direction: number, date: Date) {
   const frequency = getFrequency(line, station, date).seconds;
-  const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-  const offset = simpleHash(`${line.id}-${station}-${direction}-${dayKey}`) % frequency;
+  const offset = stationOffsetSeconds(line, station, direction) % frequency;
   const secondsNow = date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds();
   const period = frequency;
-  let slot = Math.ceil((secondsNow + offset) / period);
-  let remaining = slot * period - (secondsNow + offset);
+  let slot = Math.ceil((secondsNow - offset) / period);
+  let remaining = slot * period + offset - secondsNow;
   if (remaining <= 0) {
     slot += 1;
-    remaining = period;
+    remaining += period;
   }
   return { remaining, slot };
 }
@@ -791,12 +819,35 @@ export default function Home() {
     return normalized ? line.stations.filter((item) => item.toLowerCase().includes(normalized)) : line.stations;
   }, [line.stations, query]);
 
+function stationHasService(line: RailLine, station: string, direction: number, date: Date) {
+  const hours = serviceHours(line, date);
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  // How long after the line's published opening time the *first* train can
+  // physically reach this station, and how long before the published
+  // closing time the *last* train through here (continuing in this
+  // direction) must have already passed, given its travel time to/from the
+  // far end of the line. Both push the window inward (more conservative),
+  // never outward — matches the "don't claim a train that isn't there" rule.
+  const openOffsetMin = stationOffsetSeconds(line, station, direction) / 60;
+  const closeOffsetMin = stationOffsetSeconds(line, station, direction === 1 ? 0 : 1) / 60;
+  const effectiveOpensAt = hours.opensAt + openOffsetMin;
+  const effectiveClosesAt = hours.closesAt - closeOffsetMin;
+  const afterMidnightEnd = effectiveClosesAt - 24 * 60;
+  const insideAfterMidnight = effectiveClosesAt > 24 * 60 && minutes < afterMidnightEnd;
+  return insideAfterMidnight || (minutes >= effectiveOpensAt && minutes < Math.min(effectiveClosesAt, 24 * 60));
+}
+
   const frequency = getFrequency(line, station, now);
   const serviceAlert = alertFeed.alerts.find((alert) => alert.lineId === line.id);
   const networkAlerts = alertFeed.alerts
     .map((alert) => ({ alert, alertLine: railLines.find((item) => item.id === alert.lineId) }))
     .filter((item): item is { alert: ServiceAlert; alertLine: RailLine } => Boolean(item.alertLine));
-  const serviceClosed = isOutsideServiceHours(line, now);
+  const rawDirectionTrips = [
+    ...(stationIndex > 0 ? [{ direction: -1, directionKey: 0, destination: line.terminalA, nextStation: line.stations[stationIndex - 1], arrival: getArrival(line, station, 0, now) }] : []),
+    ...(stationIndex < line.stations.length - 1 ? [{ direction: 1, directionKey: 1, destination: line.terminalB, nextStation: line.stations[stationIndex + 1], arrival: getArrival(line, station, 1, now) }] : []),
+  ];
+  const directionTrips = rawDirectionTrips.filter((trip) => stationHasService(line, station, trip.direction === 1 ? 1 : 0, now));
+  const serviceClosed = isOutsideServiceHours(line, now) || directionTrips.length === 0;
   const serviceSuspended = Boolean(serviceAlert && /(งดให้บริการ|หยุดเดินรถ|หยุดให้บริการ|ปิดสถานี)/i.test(serviceAlert.summary));
   const trainsUnavailable = serviceClosed || serviceSuspended;
   const announcedFrequencyMinutes = serviceAlert?.delayMinutes && serviceAlert.summary.includes("ความถี่") ? serviceAlert.delayMinutes[0] : null;
@@ -804,10 +855,6 @@ export default function Home() {
   const effectiveFrequency = announcedFrequencyMinutes
     ? frequencyInfo(announcedFrequencyMinutes * 60, `ตามประกาศเหตุขัดข้อง · ความถี่ประมาณ ${announcedFrequencyMinutes} นาที`, serviceAlert?.sourceName || "ประกาศล่าสุด", serviceAlert?.sourceUrl, false)
     : frequency;
-  const directionTrips = [
-    ...(stationIndex > 0 ? [{ direction: -1, directionKey: 0, destination: line.terminalA, nextStation: line.stations[stationIndex - 1], arrival: getArrival(line, station, 0, now) }] : []),
-    ...(stationIndex < line.stations.length - 1 ? [{ direction: 1, directionKey: 1, destination: line.terminalB, nextStation: line.stations[stationIndex + 1], arrival: getArrival(line, station, 1, now) }] : []),
-  ];
   const activeCrowdReports = (alertFeed.crowdReports ?? []).filter((report) => report.lineId === line.id && new Date(report.expiresAt).getTime() > now.getTime());
   const nearbyCrowdReport = activeCrowdReports
     .filter((report) => Math.abs(line.stations.indexOf(report.station) - stationIndex) <= 7)
