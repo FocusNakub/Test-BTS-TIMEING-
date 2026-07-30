@@ -177,6 +177,55 @@ function isLoginWalled(text) {
 // *currently published* alert's source was, not just the ones seen in this run.
 const priorityByName = new Map(sources.map((source) => [source.name, source.priority]));
 
+// --- Google News RSS fallback -------------------------------------------
+// Facebook blocks anonymous/automated visits far more often than not, so
+// when a page comes back as a login wall we fall back to searching Google
+// News for the same page's public posts instead of giving up on that
+// source entirely. This mirrors the "main news source may report a
+// temporary alert when the operator hasn't posted directly yet" rule.
+const fallbackMaxAgeMs = 6 * 60 * 60 * 1000;
+
+function fbHandle(url) {
+  return new URL(url).pathname.replace(/^\/+|\/+$/g, "");
+}
+
+function decodeXml(value = "") {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ").trim();
+}
+
+function xmlTag(item, name) {
+  return decodeXml(item.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, "i"))?.[1]);
+}
+
+async function googleNewsFallback(source) {
+  const handle = fbHandle(source.url);
+  const query = `site:facebook.com/${handle} (ขัดข้อง OR ล่าช้า OR งดให้บริการ OR หยุดเดินรถ) when:1d`;
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=th&gl=TH&ceid=TH:th`;
+  const response = await fetch(url, { headers: { "User-Agent": "BangkokRailDaily/1.0" } });
+  if (!response.ok) throw new Error(`Google News HTTP ${response.status}`);
+  const xml = await response.text();
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map((match) => match[1]);
+  const now = Date.now();
+  for (const item of items) {
+    const title = xmlTag(item, "title");
+    const description = xmlTag(item, "description");
+    const text = `${title} ${description}`.trim();
+    const publishedAt = new Date(xmlTag(item, "pubDate"));
+    if (!Number.isFinite(publishedAt.getTime())) continue;
+    if (now - publishedAt.getTime() > fallbackMaxAgeMs || publishedAt.getTime() > now + 5 * 60 * 1000) continue;
+    const postUrl = (xmlTag(item, "link") || item.match(/<link>([^<]+)<\/link>/i)?.[1] || "").split("?")[0];
+    if (!postUrl) continue;
+    return { text, postUrl };
+  }
+  return null;
+}
+// --------------------------------------------------------------------------
+
 const current = await api({}, endpoint.replace(/\/update$/, ""));
 const currentByLine = new Map((current.alerts || []).map((alert) => [alert.lineId, alert]));
 const browser = await chromium.launch({ headless: true });
@@ -191,10 +240,19 @@ for (const source of sources) {
   try {
     await page.goto(source.url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(2500);
-    const { text, postUrl } = await latestPost(page);
+    let { text, postUrl } = await latestPost(page);
     if (isLoginWalled(text)) {
-      console.warn(`Skipped ${source.name}: looks like a Facebook login/consent wall, not real post content (len=${text.length})`);
-      continue;
+      console.warn(`${source.name}: direct page looks like a Facebook login/consent wall (len=${text.length}), trying Google News fallback`);
+      const fallback = await googleNewsFallback(source).catch((error) => {
+        console.warn(`Google News fallback failed for ${source.name}: ${error.message}`);
+        return null;
+      });
+      if (!fallback) {
+        console.warn(`Skipped ${source.name}: no usable Google News fallback either`);
+        continue;
+      }
+      console.warn(`${source.name}: using Google News fallback result`);
+      ({ text, postUrl } = fallback);
     }
     const affectedLines = linesFor(text, source.lineIds);
     if (!affectedLines.length) continue;
